@@ -14,6 +14,8 @@ names in camelCase, the same safety behaviour, and the same frames on the CAN bu
 
 WebUSB and Web Serial need a Chromium browser and a secure page (https or localhost).
 
+`docs/hardware-testing.md` lists what has run on real arms and what has not.
+
 ## In the browser
 
 ```ts
