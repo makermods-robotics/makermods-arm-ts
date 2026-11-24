@@ -1,0 +1,48 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@makermods/arm-core": [
+        "../../packages/arm-core/src/index.ts"
+      ],
+      "@makermods/arm-core/*": [
+        "../../packages/arm-core/src/*.ts"
+      ],
+      "@makermods/metal-arm": [
+        "../../packages/metal-arm/src/index.ts"
+      ],
+      "@makermods/metal-arm/*": [
+        "../../packages/metal-arm/src/*.ts"
+      ],
+      "@makermods/maker-arm": [
+        "../../packages/maker-arm/src/index.ts"
+      ],
+      "@makermods/maker-arm/*": [
+        "../../packages/maker-arm/src/*.ts"
+      ],
+      "@makermods/so101": [
+        "../../packages/so101/src/index.ts"
+      ],
+      "@makermods/so101/*": [
+        "../../packages/so101/src/*.ts"
+      ],
+      "@makermods/dreamlabs": [
+        "../../../dreamlabs-ts/src/index.ts"
+      ],
+      "@makermods/dreamlabs/ik": [
+        "../../../dreamlabs-ts/src/ik/index.ts"
+      ],
+      "@makermods/dreamlabs/*": [
+        "../../../dreamlabs-ts/src/*.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "../../e2e/**/*.ts",
+    "../../playwright.config.ts"
+  ],
+  "exclude": []
+}

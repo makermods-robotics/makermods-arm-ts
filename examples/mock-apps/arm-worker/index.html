@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arm in a worker</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Arm in a worker</h1>
+    <p>
+      The page asks for the adapter (only a page can show the chooser); a Web Worker finds it among the granted
+      adapters and runs the arm and its control loop, posting its status back.
+    </p>
+    <fieldset>
+      <legend>Adapter</legend>
+      <select id="product" aria-label="Arm">
+        <option value="metal">Metal Arm</option>
+        <option value="maker">Maker Arm</option>
+      </select>
+      <button id="connect">Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+    </fieldset>
+    <fieldset>
+      <legend>Motion</legend>
+      <button id="enable" disabled>Enable (hold)</button>
+      <label>Joint <select id="joint"></select></label>
+      <label>by <input id="delta" type="number" value="0.3" step="0.05" /> rad</label>
+      <button id="move" disabled>Move</button>
+      <button id="rest" disabled>Rest and release</button>
+      <button id="estop" class="stop" disabled>E-stop</button>
+    </fieldset>
+    <p>State: <span id="state" class="state">not connected</span> <span id="fault"></span></p>
+    <p id="message" role="status"></p>
+    <p>Target: <code id="target">-</code></p>
+    <table>
+      <thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead>
+      <tbody id="joints"></tbody>
+    </table>
+    <fieldset>
+      <legend>This page</legend>
+      <button id="ping">Ping</button> <span id="pings">0</span> pings.
+      Longest main-thread stall since load: <span id="stall">0</span> ms; status messages: <span id="updates">0</span>.
+    </fieldset>
+    <pre id="log" aria-label="Log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

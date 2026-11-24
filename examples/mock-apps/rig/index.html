@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Two-arm robot</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Two-arm robot</h1>
+    <p>Two arms, each on its own adapter, described by a rig and driven together as an arm group.</p>
+    <fieldset>
+      <legend>Rig</legend>
+      <select id="product" aria-label="Arms">
+        <option value="metal">Metal Arms</option>
+        <option value="maker">Maker Arms</option>
+      </select>
+      <button id="grant">Add adapter</button> Granted: <span id="granted">none</span>
+      <p><label for="rig-text">Rig (the rig file's arms)</label></p>
+      <textarea id="rig-text" rows="7"></textarea>
+      <button id="connect">Connect both</button>
+      <button id="disconnect" disabled>Disconnect</button>
+    </fieldset>
+    <fieldset>
+      <legend>Motion</legend>
+      <button id="enable" disabled>Enable both</button>
+      <label>Joint <select id="joint"></select></label>
+      <label>by <input id="delta" type="number" value="0.3" step="0.05" /> rad</label>
+      <button id="move-left" disabled>Move left</button>
+      <button id="move-right" disabled>Move right</button>
+      <button id="sine" disabled>Bimanual sine</button>
+      <button id="stop" disabled>Stop both (rest and release)</button>
+      <button id="estop" class="stop" disabled>E-stop both</button>
+    </fieldset>
+    <fieldset>
+      <legend>Bimanual teleop (two simulated Star Arm 102 leaders)</legend>
+      <div class="arms">
+        <div><h3>Left leader</h3><div id="leader-left">Connect first.</div></div>
+        <div><h3>Right leader</h3><div id="leader-right">Connect first.</div></div>
+      </div>
+      <button id="teleop-start" disabled>Start teleop</button>
+      <button id="teleop-stop" disabled>Stop teleop</button>
+      <p>Teleop: <span id="teleop" class="state">idle</span></p>
+    </fieldset>
+    <p id="message" role="status"></p>
+    <div class="arms">
+      <div>
+        <h2>left: <span id="left-state" class="state">not connected</span></h2>
+        <p id="left-fault"></p>
+        <table><thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead><tbody id="left-joints"></tbody></table>
+      </div>
+      <div>
+        <h2>right: <span id="right-state" class="state">not connected</span></h2>
+        <p id="right-fault"></p>
+        <table><thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead><tbody id="right-joints"></tbody></table>
+      </div>
+    </div>
+    <pre id="log" aria-label="Log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

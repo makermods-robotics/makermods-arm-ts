@@ -1,0 +1,342 @@
+{
+ "source": "makermods-console web/test/so101-autocal.test.ts PY_LIMITS / PY_WRAP (MakerLab's Python helpers, uv run python)",
+ "limits": [
+  {
+   "cw": 844,
+   "ccw": 2178,
+   "ref": 3000,
+   "expected": {
+    "rangeMin": 666,
+    "rangeMax": 3428,
+    "mid": 3559,
+    "rawMin": 844,
+    "rawMax": 2178,
+    "homingOffset": 1512
+   }
+  },
+  {
+   "cw": 220,
+   "ccw": 1924,
+   "ref": 2500,
+   "expected": {
+    "rangeMin": 851,
+    "rangeMax": 3243,
+    "mid": 3120,
+    "rawMin": 220,
+    "rawMax": 1924,
+    "homingOffset": 1073
+   }
+  },
+  {
+   "cw": 1847,
+   "ccw": 3709,
+   "ref": 100,
+   "expected": {
+    "rangeMin": 930,
+    "rangeMax": 3164,
+    "mid": 730,
+    "rawMin": 1847,
+    "rawMax": 3709,
+    "homingOffset": -1317
+   }
+  },
+  {
+   "cw": 1004,
+   "ccw": 2722,
+   "ref": 3500,
+   "expected": {
+    "rangeMin": 858,
+    "rangeMax": 3236,
+    "mid": 3911,
+    "rawMin": 1004,
+    "rawMax": 2722,
+    "homingOffset": 1864
+   }
+  },
+  {
+   "cw": 2905,
+   "ccw": 3097,
+   "ref": 0,
+   "expected": {
+    "rangeMin": 95,
+    "rangeMax": 3999,
+    "mid": 953,
+    "rawMin": 2905,
+    "rawMax": 3097,
+    "homingOffset": -1094
+   }
+  },
+  {
+   "cw": 690,
+   "ccw": 3236,
+   "ref": 3500,
+   "expected": {
+    "rangeMin": 1272,
+    "rangeMax": 2822,
+    "mid": 4011,
+    "rawMin": 690,
+    "rawMax": 3236,
+    "homingOffset": 1964
+   }
+  },
+  {
+   "cw": 2484,
+   "ccw": 30,
+   "ref": 1000,
+   "expected": {
+    "rangeMin": 820,
+    "rangeMax": 3274,
+    "mid": 1257,
+    "rawMin": 30,
+    "rawMax": 2484,
+    "homingOffset": -790
+   }
+  },
+  {
+   "cw": 1831,
+   "ccw": 223,
+   "ref": 500,
+   "expected": {
+    "rangeMin": 1243,
+    "rangeMax": 2851,
+    "mid": 1027,
+    "rawMin": 223,
+    "rawMax": 1831,
+    "homingOffset": -1020
+   }
+  },
+  {
+   "cw": 1661,
+   "ccw": 2999,
+   "ref": 3500,
+   "expected": {
+    "rangeMin": 668,
+    "rangeMax": 3426,
+    "mid": 282,
+    "rawMin": 1661,
+    "rawMax": 2999,
+    "homingOffset": -1765
+   }
+  },
+  {
+   "cw": 844,
+   "ccw": 2178,
+   "ref": 1000,
+   "expected": {
+    "rangeMin": 1380,
+    "rangeMax": 2714,
+    "mid": 1511,
+    "rawMin": 844,
+    "rawMax": 2178,
+    "homingOffset": -536
+   }
+  },
+  {
+   "cw": 3000,
+   "ccw": 1000,
+   "ref": 2000,
+   "expected": {
+    "rangeMin": 1047,
+    "rangeMax": 3047,
+    "mid": 2000,
+    "rawMin": 1000,
+    "rawMax": 3000,
+    "homingOffset": -47
+   }
+  },
+  {
+   "cw": 3000,
+   "ccw": 1000,
+   "ref": 100,
+   "expected": {
+    "rangeMin": 999,
+    "rangeMax": 3095,
+    "mid": 4048,
+    "rawMin": 1000,
+    "rawMax": 3000,
+    "homingOffset": 2001
+   }
+  },
+  {
+   "cw": 1000,
+   "ccw": 3000,
+   "ref": 2000,
+   "expected": {
+    "rangeMin": 1047,
+    "rangeMax": 3047,
+    "mid": 2000,
+    "rawMin": 1000,
+    "rawMax": 3000,
+    "homingOffset": -47
+   }
+  },
+  {
+   "cw": 4095,
+   "ccw": 0,
+   "ref": 2000,
+   "expected": {
+    "rangeMin": 0,
+    "rangeMax": 4094,
+    "mid": 2047,
+    "rawMin": 0,
+    "rawMax": 4095,
+    "homingOffset": 0
+   }
+  },
+  {
+   "cw": 0,
+   "ccw": 4095,
+   "ref": 2000,
+   "expected": {
+    "rangeMin": 0,
+    "rangeMax": 4094,
+    "mid": 2047,
+    "rawMin": 0,
+    "rawMax": 4095,
+    "homingOffset": 0
+   }
+  },
+  {
+   "cw": 100,
+   "ccw": 100,
+   "ref": 100,
+   "expected": {
+    "rangeMin": 2047,
+    "rangeMax": 2047,
+    "mid": 100,
+    "rawMin": 100,
+    "rawMax": 100,
+    "homingOffset": -1947
+   }
+  },
+  {
+   "cw": 2047,
+   "ccw": 2047,
+   "ref": 0,
+   "expected": {
+    "rangeMin": 2047,
+    "rangeMax": 2047,
+    "mid": 2047,
+    "rawMin": 2047,
+    "rawMax": 2047,
+    "homingOffset": 0
+   }
+  },
+  {
+   "cw": 1,
+   "ccw": 4095,
+   "ref": 0,
+   "expected": {
+    "rangeMin": 2046,
+    "rangeMax": 2048,
+    "mid": 0,
+    "rawMin": 1,
+    "rawMax": 4095,
+    "homingOffset": -2047
+   }
+  },
+  {
+   "cw": 4094,
+   "ccw": 4000,
+   "ref": 4050,
+   "expected": {
+    "rangeMin": 2000,
+    "rangeMax": 2094,
+    "mid": 4047,
+    "rawMin": 4000,
+    "rawMax": 4094,
+    "homingOffset": 2000
+   }
+  },
+  {
+   "cw": 4095,
+   "ccw": 4093,
+   "ref": 4094,
+   "expected": {
+    "rangeMin": 2046,
+    "rangeMax": 2048,
+    "mid": 4094,
+    "rawMin": 4093,
+    "rawMax": 4095,
+    "homingOffset": 2047
+   }
+  },
+  {
+   "cw": 2049,
+   "ccw": 4095,
+   "ref": 3000,
+   "expected": {
+    "rangeMin": 1024,
+    "rangeMax": 3070,
+    "mid": 3072,
+    "rawMin": 2049,
+    "rawMax": 4095,
+    "homingOffset": 1025
+   }
+  },
+  {
+   "cw": 4095,
+   "ccw": 2049,
+   "ref": 3000,
+   "expected": {
+    "rangeMin": 1024,
+    "rangeMax": 3070,
+    "mid": 3072,
+    "rawMin": 2049,
+    "rawMax": 4095,
+    "homingOffset": 1025
+   }
+  }
+ ],
+ "wrap": [
+  {
+   "base": 100,
+   "present": 4000,
+   "min": 0,
+   "max": 4095,
+   "expected": 4095
+  },
+  {
+   "base": 4000,
+   "present": 100,
+   "min": 0,
+   "max": 4095,
+   "expected": 0
+  },
+  {
+   "base": 2047,
+   "present": 2047,
+   "min": 0,
+   "max": 4095,
+   "expected": 2047
+  },
+  {
+   "base": 10,
+   "present": 4090,
+   "min": 666,
+   "max": 3428,
+   "expected": 3428
+  },
+  {
+   "base": 3000,
+   "present": 200,
+   "min": 666,
+   "max": 3428,
+   "expected": 666
+  },
+  {
+   "base": 0,
+   "present": 2048,
+   "min": 0,
+   "max": 4095,
+   "expected": 0
+  },
+  {
+   "base": 0,
+   "present": 2049,
+   "min": 0,
+   "max": 4095,
+   "expected": 4095
+  }
+ ]
+}

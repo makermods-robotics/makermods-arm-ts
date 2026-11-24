@@ -1,0 +1,1660 @@
+{
+ "package": "maker_arm",
+ "product": {
+  "_product": {
+   "classes": {},
+   "constants": [
+    "CLI_NAME",
+    "DEFAULT_PROFILE",
+    "DEFAULT_STAR_MAPPING",
+    "DISPLAY_NAME",
+    "DIST_NAME",
+    "DREAM_EMBODIMENT",
+    "DREAM_JOINT_OFFSET",
+    "DREAM_JOINT_SIGN",
+    "MOTOR_VENDOR",
+    "PACKAGE",
+    "PROFILE_DIR",
+    "URDF",
+    "ZERO_POSE"
+   ],
+   "functions": {}
+  },
+  "_sim_motor": {
+   "classes": {
+    "SimBus": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "SimMotor": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "feedback": [],
+      "handle": [
+       "can_id",
+       "data"
+      ]
+     },
+     "properties": [
+      "faulted",
+      "mode"
+     ]
+    }
+   },
+   "constants": [
+    "FAULT_CODE",
+    "FAULT_TEXT",
+    "FULL_TURN_SUPPORTED",
+    "PREFIX",
+    "WARNING_SUPPORTED"
+   ],
+   "functions": {
+    "classify": [
+     "can_id",
+     "data"
+    ],
+    "feedback_bytes": [
+     "motor_id",
+     "pos",
+     "vel",
+     "tau",
+     "temp",
+     "mode",
+     "fault",
+     "warn",
+     "params"
+    ],
+    "for_joint": [
+     "joint",
+     "host_id",
+     "position",
+     "options"
+    ],
+    "respond": [
+     "motors",
+     "can_id",
+     "data"
+    ],
+    "watchdog_timeout": [
+     "motor"
+    ]
+   }
+  },
+  "motor": {
+   "classes": {
+    "Motor": {
+     "constants": [
+      "MODE_FAULT_TICKS",
+      "PARAMS"
+     ],
+     "fields": [],
+     "methods": {
+      "arm_watchdog": [
+       "timeout_ms",
+       "timeout"
+      ],
+      "check": [
+       "timeout",
+       "attempts"
+      ],
+      "clear_fault": [],
+      "confirms": [
+       "expected"
+      ],
+      "disable": [],
+      "disable_confirmed": [
+       "timeout",
+       "attempts"
+      ],
+      "enable": [],
+      "enable_confirmed": [
+       "timeout"
+      ],
+      "handle_frame": [
+       "can_id",
+       "data"
+      ],
+      "health_problem": [],
+      "poll_status": [],
+      "preload": [
+       "pos",
+       "timeout"
+      ],
+      "probe_params": [
+       "timeout",
+       "attempts"
+      ],
+      "read_param": [
+       "name_or_index",
+       "dtype",
+       "timeout"
+      ],
+      "read_state": [
+       "timeout",
+       "attempts"
+      ],
+      "request_state": [],
+      "reset_cache": [],
+      "restore_watchdog": [
+       "token",
+       "timeout"
+      ],
+      "send_command": [
+       "pos",
+       "vel",
+       "kp",
+       "kd",
+       "tau"
+      ],
+      "set_id": [
+       "new_id",
+       "timeout"
+      ],
+      "set_zero": [],
+      "validate": [
+       "timeout"
+      ],
+      "write_param": [
+       "name_or_index",
+       "value",
+       "dtype",
+       "timeout",
+       "save"
+      ]
+     },
+     "properties": [
+      "fault_latched",
+      "feedback",
+      "feedback_age",
+      "feedback_sequence",
+      "status",
+      "status_age",
+      "torque_limit",
+      "watchdog_released"
+     ]
+    },
+    "MotorFeedback": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "position",
+      "velocity",
+      "torque",
+      "temperature",
+      "temperatures",
+      "enabled",
+      "warning",
+      "mode",
+      "fault_flag"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "MotorStatus": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "has_fault",
+      "code",
+      "text",
+      "enabled"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "ParamSpec": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [
+    "DEFAULT_HOST_ID",
+    "DEFAULT_MODEL",
+    "ID_RANGE",
+    "KD_RANGE",
+    "KP_RANGE",
+    "MODELS"
+   ],
+   "functions": {
+    "route": [
+     "can_id",
+     "data",
+     "host_id"
+    ]
+   }
+  },
+  "protocol": {
+   "classes": {
+    "FaultStatus": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "word"
+     ],
+     "methods": {},
+     "properties": [
+      "has_fault",
+      "text"
+     ]
+    },
+    "MotorFeedback": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "position",
+      "velocity",
+      "torque",
+      "temperature",
+      "mode",
+      "fault_flag",
+      "warning_flag"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "MotorParams": {
+     "constants": [],
+     "fields": [
+      "p_max",
+      "v_max",
+      "t_max"
+     ],
+     "methods": {},
+     "properties": [
+      "p_min",
+      "t_min",
+      "v_min"
+     ]
+    },
+    "ParamIndex": {
+     "constants": [
+      "CAN_TIMEOUT",
+      "MECH_POS",
+      "RUN_MODE"
+     ],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "ParamReply": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "index",
+      "raw",
+      "write"
+     ],
+     "methods": {
+      "value": [
+       "dtype"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [
+    "CAN_TIMEOUT_TICKS_PER_MS",
+    "FAULT_BITS",
+    "HOST_CAN_ID",
+    "MODE_CALIBRATION",
+    "MODE_RESET",
+    "MODE_RUN",
+    "MOTOR_PARAMS",
+    "OP_CLEAR_FAULT",
+    "OP_DISABLE",
+    "OP_ENABLE",
+    "OP_SET_ZERO",
+    "RS00",
+    "RS02"
+   ],
+   "functions": {
+    "command": [
+     "motor_id",
+     "opcode",
+     "argument"
+    ],
+    "encode_clear_fault": [
+     "motor_id"
+    ],
+    "encode_control": [
+     "motor_id",
+     "pos",
+     "vel",
+     "kp",
+     "kd",
+     "tau",
+     "params"
+    ],
+    "encode_disable": [
+     "motor_id"
+    ],
+    "encode_enable": [
+     "motor_id"
+    ],
+    "encode_fault_query": [
+     "motor_id"
+    ],
+    "encode_read_param": [
+     "motor_id",
+     "index"
+    ],
+    "encode_set_zero": [
+     "motor_id"
+    ],
+    "encode_write_param": [
+     "motor_id",
+     "index",
+     "value",
+     "dtype"
+    ],
+    "fault_text": [
+     "word"
+    ],
+    "float_to_uint": [
+     "value",
+     "lo",
+     "hi",
+     "bits"
+    ],
+    "parse_frame": [
+     "can_id",
+     "data",
+     "params",
+     "host_id"
+    ],
+    "reply_motor_id": [
+     "can_id",
+     "data"
+    ],
+    "uint_to_float": [
+     "value",
+     "lo",
+     "hi",
+     "bits"
+    ]
+   }
+  }
+ },
+ "shared": {
+  "arm": {
+   "classes": {
+    "Arm": {
+     "attributes": [
+      "config",
+      "fault_reason",
+      "fault_reasons",
+      "motors",
+      "rest_pose",
+      "unconfirmed_disable"
+     ],
+     "constants": [
+      "FLOAT_KD",
+      "PARAM_TIMEOUT",
+      "REPLY_ATTEMPTS",
+      "REPLY_TIMEOUT"
+     ],
+     "fields": [],
+     "methods": {
+      "attach": [
+       "cancel",
+       "speed"
+      ],
+      "clear_faults": [],
+      "connect": [
+       "clear_faults",
+       "clear_released"
+      ],
+      "detach": [],
+      "detach_unsafe": [],
+      "disable": [],
+      "disconnect": [],
+      "ee_pose": [],
+      "enable": [
+       "start_loop",
+       "cancel",
+       "speed"
+      ],
+      "estop": [],
+      "float_mode": [
+       "kd",
+       "extra_torque"
+      ],
+      "from_yaml": [
+       "path",
+       "backend",
+       "backend_kwargs"
+      ],
+      "get_commanded_positions": [],
+      "get_faults": [],
+      "get_joint_positions": [],
+      "get_joint_torques": [],
+      "get_joint_velocities": [],
+      "get_temperatures": [],
+      "gripper_opening": [],
+      "gripper_target": [
+       "opening"
+      ],
+      "hold_current_position": [],
+      "move_ee": [
+       "xyz",
+       "rpy",
+       "speed",
+       "timeout",
+       "wait",
+       "cancel"
+      ],
+      "move_to": [
+       "q",
+       "speed",
+       "timeout",
+       "wait",
+       "cancel"
+      ],
+      "refresh": [
+       "wait",
+       "timeout"
+      ],
+      "return_to_rest": [
+       "rest"
+      ],
+      "set_gains": [
+       "kp",
+       "kd"
+      ],
+      "set_joint_targets": [
+       "targets"
+      ],
+      "set_motor_id": [
+       "old",
+       "new",
+       "timeout"
+      ],
+      "set_zero": [
+       "indices"
+      ],
+      "status": [],
+      "stop": [],
+      "watchdog_joints": []
+     },
+     "properties": [
+      "backend",
+      "chain",
+      "joint_names",
+      "state"
+     ]
+    },
+    "ArmState": {
+     "constants": [
+      "DISCONNECTED",
+      "CONNECTED",
+      "ENABLED",
+      "FAULT"
+     ],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [
+    "EE_ANGLE_TOL",
+    "EE_MIN_SECONDS",
+    "EE_POSITION_TOL"
+   ],
+   "functions": {}
+  },
+  "bus": {
+   "classes": {
+    "Bus": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "missing": [
+       "rows"
+      ],
+      "read": [
+       "motor_id",
+       "clear",
+       "timeout"
+      ],
+      "read_all": [
+       "clear"
+      ],
+      "release": [
+       "rows"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [
+    "RELEASE_ATTEMPTS",
+    "RELEASE_REPLY_S"
+   ],
+   "functions": {
+    "joint_position": [
+     "joint",
+     "motor_position"
+    ],
+    "release": [
+     "backend",
+     "config"
+    ],
+    "release_motor": [
+     "m"
+    ]
+   }
+  },
+  "cameras": {
+   "classes": {
+    "Camera": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "latest": [
+       "max_age_s"
+      ],
+      "newest": [
+       "max_age_s"
+      ],
+      "open": [
+       "timeout"
+      ],
+      "read": [
+       "timeout"
+      ],
+      "snapshot": [
+       "path",
+       "max_age_s"
+      ]
+     },
+     "properties": [
+      "is_open"
+     ]
+    },
+    "CameraInfo": {
+     "constants": [],
+     "fields": [
+      "id",
+      "index",
+      "name",
+      "path"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "Frame": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": [
+      "age_s",
+      "image",
+      "stamp"
+     ]
+    }
+   },
+   "constants": [
+    "READ_FAILURE_S",
+    "REOPEN_S",
+    "V4L_BY_PATH",
+    "V4L_SYSFS"
+   ],
+   "functions": {
+    "list_cameras": [],
+    "resolve": [
+     "camera_id"
+    ]
+   }
+  },
+  "config": {
+   "classes": {
+    "ArmConfig": {
+     "constants": [],
+     "fields": [
+      "host_id",
+      "required_motor_ids",
+      "control_rate_hz",
+      "max_velocity",
+      "limit_margin",
+      "feedback_timeout",
+      "fault_poll_interval",
+      "full_turn_grace",
+      "hold_on_fault",
+      "gravity_scale",
+      "urdf",
+      "urdf_joints",
+      "urdf_base_rpy",
+      "tcp_xyz",
+      "tcp_rpy",
+      "friction_deadzone",
+      "rest_pose",
+      "ik",
+      "startup_step",
+      "startup_synced",
+      "startup_stuck",
+      "startup_stuck_seconds",
+      "rest_speed",
+      "rest_rate_hz",
+      "rest_timeout",
+      "rest_arrived",
+      "rest_settle",
+      "rest_stall_improvement",
+      "rest_stall_polls",
+      "joints"
+     ],
+     "methods": {
+      "from_yaml": [
+       "path"
+      ]
+     },
+     "properties": [
+      "n_joints"
+     ]
+    },
+    "JointConfig": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "lo",
+      "hi",
+      "kp",
+      "kd",
+      "model",
+      "name",
+      "direction",
+      "offset",
+      "can_timeout_ms",
+      "max_temperature_c",
+      "enable_temperature_c",
+      "return_to_rest",
+      "release_on_fault",
+      "warning_is_fault",
+      "hold_torque_nm",
+      "closing_direction",
+      "open_position",
+      "reply_id",
+      "urdf_sign",
+      "urdf_offset",
+      "gravity_limit_nm",
+      "gravity_factor",
+      "friction_viscous",
+      "friction_velocity_clamp",
+      "friction_coulomb",
+      "friction_rest_nm"
+     ],
+     "methods": {},
+     "properties": [
+      "label"
+     ]
+    }
+   },
+   "constants": [],
+   "functions": {
+    "check_gains": [
+     "motor_id",
+     "kp",
+     "kd"
+    ]
+   }
+  },
+  "errors": {
+   "classes": {
+    "ArmError": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "ConnectError": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "FaultLatched": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "ParamTimeout": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "StateError": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {}
+  },
+  "gravity": {
+   "classes": {
+    "GravityFeedforward": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "model": [
+       "q"
+      ],
+      "reset": [],
+      "torques": [
+       "measured_q",
+       "ages",
+       "goal_q",
+       "now"
+      ]
+     },
+     "properties": [
+      "n"
+     ]
+    }
+   },
+   "constants": [
+    "DEFAULT_GRAVITY_SCALE",
+    "MAX_GRAVITY_SCALE",
+    "RAMP_S",
+    "RAMP_STEP_S",
+    "STALE_S"
+   ],
+   "functions": {
+    "from_config": [
+     "config",
+     "chain"
+    ]
+   }
+  },
+  "gripper": {
+   "classes": {
+    "GripperHold": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "gains": [
+       "kp",
+       "kd"
+      ],
+      "reset": [],
+      "update": [
+       "goal",
+       "position",
+       "velocity",
+       "effort",
+       "kp",
+       "now"
+      ]
+     },
+     "properties": [
+      "closing_cap_nm"
+     ]
+    }
+   },
+   "constants": [
+    "CAPPED_CLOSING_KD"
+   ],
+   "functions": {}
+  },
+  "kinematics": {
+   "classes": {
+    "Chain": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "fk": [
+       "q"
+      ],
+      "fk_jacobian_many": [
+       "qs"
+      ],
+      "from_urdf": [
+       "path",
+       "joints",
+       "base",
+       "tip",
+       "tcp_xyz",
+       "tcp_rpy",
+       "sign",
+       "offset",
+       "base_xyz",
+       "base_rpy"
+      ],
+      "gravity_torques": [
+       "q",
+       "gravity"
+      ],
+      "ik": [
+       "target",
+       "q0",
+       "rpy",
+       "position_only",
+       "limits",
+       "max_iters",
+       "tol",
+       "rot_tol",
+       "rot_weight",
+       "null_gain",
+       "max_step"
+      ],
+      "jacobian": [
+       "q"
+      ],
+      "potential_energy": [
+       "q",
+       "gravity"
+      ]
+     },
+     "properties": []
+    },
+    "IKResult": {
+     "constants": [],
+     "fields": [
+      "q",
+      "ok",
+      "pos_err",
+      "rot_err",
+      "iters"
+     ],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [
+    "ACTUATED",
+    "GRAVITY"
+   ],
+   "functions": {
+    "chain_from_config": [
+     "config"
+    ],
+    "matrix_to_rpy": [
+     "rot"
+    ],
+    "pose_to_xyz_rpy": [
+     "pose"
+    ],
+    "resolve_urdf": [
+     "urdf"
+    ],
+    "rotation_error": [
+     "target",
+     "current"
+    ],
+    "rpy_to_matrix": [
+     "rpy"
+    ],
+    "xyz_rpy_to_pose": [
+     "xyz",
+     "rpy"
+    ]
+   }
+  },
+  "leaders.arm": {
+   "classes": {
+    "ArmLeader": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "connect": [
+       "cancel"
+      ],
+      "read": []
+     },
+     "properties": []
+    },
+    "Friction": {
+     "constants": [],
+     "fields": [
+      "viscous",
+      "coulomb",
+      "rest",
+      "clamp",
+      "deadzone"
+     ],
+     "methods": {
+      "from_config": [
+       "config"
+      ],
+      "torques": [
+       "positions",
+       "velocities"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [
+    "DEFAULT_DEADZONE"
+   ],
+   "functions": {}
+  },
+  "leaders.base": {
+   "classes": {
+    "Leader": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "connect": [
+       "cancel"
+      ],
+      "read": []
+     },
+     "properties": []
+    },
+    "LeaderError": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {}
+  },
+  "leaders.star": {
+   "classes": {
+    "StarLeader": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "connect": [
+       "cancel"
+      ],
+      "read": [],
+      "read_raw": [],
+      "zero": []
+     },
+     "properties": [
+      "servo_ids"
+     ]
+    }
+   },
+   "constants": [
+    "BAUDRATE",
+    "SETTLE_S"
+   ],
+   "functions": {}
+  },
+  "mapping": {
+   "classes": {
+    "JointMapper": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "from_json": [
+       "path"
+      ],
+      "map": [
+       "raw_deg"
+      ],
+      "map_joint": [
+       "index",
+       "deg"
+      ],
+      "reset": [],
+      "unwrap": [
+       "value",
+       "lo",
+       "hi"
+      ]
+     },
+     "properties": [
+      "names",
+      "servo_ids"
+     ]
+    }
+   },
+   "constants": [],
+   "functions": {}
+  },
+  "rig": {
+   "classes": {
+    "ArmGroup": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "connect": [
+       "clear_faults",
+       "clear_released"
+      ],
+      "disable": [],
+      "disconnect": [],
+      "each": [
+       "fn",
+       "names"
+      ],
+      "enable": [
+       "cancel"
+      ],
+      "estop": [],
+      "stop": []
+     },
+     "properties": []
+    },
+    "ArmSpec": {
+     "constants": [],
+     "fields": [
+      "backend",
+      "channel",
+      "port",
+      "profile",
+      "baudrate",
+      "startup_delay"
+     ],
+     "methods": {
+      "backend_kwargs": [],
+      "build": [
+       "base",
+       "profile"
+      ],
+      "config": [
+       "base"
+      ],
+      "open_backend": [],
+      "to_yaml": []
+     },
+     "properties": [
+      "address"
+     ]
+    },
+    "LeaderSpec": {
+     "constants": [],
+     "fields": [
+      "type",
+      "port",
+      "map",
+      "arm"
+     ],
+     "methods": {
+      "to_yaml": []
+     },
+     "properties": []
+    },
+    "Rig": {
+     "constants": [],
+     "fields": [
+      "arms",
+      "cameras",
+      "leaders",
+      "path"
+     ],
+     "methods": {
+      "arm": [
+       "name",
+       "profile"
+      ],
+      "camera": [
+       "name",
+       "kwargs"
+      ],
+      "camera_id": [
+       "name"
+      ],
+      "from_dict": [
+       "raw",
+       "path"
+      ],
+      "group": [
+       "names",
+       "profile"
+      ],
+      "leader": [
+       "name",
+       "follower_arm",
+       "arms"
+      ],
+      "load": [
+       "path",
+       "missing_ok"
+      ],
+      "names": [
+       "selected"
+      ],
+      "save": [
+       "path"
+      ],
+      "spec": [
+       "name"
+      ],
+      "to_dict": [],
+      "validate": []
+     },
+     "properties": [
+      "arm_names",
+      "base"
+     ]
+    },
+    "RigError": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [
+    "BACKENDS",
+    "DEFAULT_CHANNEL",
+    "ENV_VAR",
+    "LEADER_TYPES",
+    "SLCAN_BAUDRATE",
+    "SLCAN_STARTUP_DELAY"
+   ],
+   "functions": {
+    "default_backend": [],
+    "default_path": [],
+    "only_serial_port": [],
+    "slcan_candidates": []
+   }
+  },
+  "stall": {
+   "classes": {
+    "MotorStateRecorder": {
+     "constants": [
+      "FIELDS"
+     ],
+     "fields": [],
+     "methods": {
+      "close": [
+       "stop_reason"
+      ],
+      "record": [
+       "elapsed_s",
+       "leader_targets"
+      ]
+     },
+     "properties": []
+    },
+    "StallDetector": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "is_candidate": [
+       "error",
+       "velocity",
+       "torque",
+       "feedback_age",
+       "faulted",
+       "enabled"
+      ],
+      "update": [
+       "now_s",
+       "motor_id",
+       "error",
+       "velocity",
+       "torque",
+       "feedback_age",
+       "faulted",
+       "enabled"
+      ]
+     },
+     "properties": []
+    },
+    "StallEvent": {
+     "constants": [],
+     "fields": [
+      "motor_id",
+      "candidate_since_s",
+      "confirmed_at_s",
+      "error_rad",
+      "velocity_rad_s",
+      "torque_nm"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "StallThresholds": {
+     "constants": [],
+     "fields": [
+      "error_rad",
+      "velocity_rad_s",
+      "torque_nm",
+      "persistence_s",
+      "max_feedback_age_s"
+     ],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {
+    "default_stall_log_path": [
+     "payload_kg",
+     "directory"
+    ]
+   }
+  },
+  "teleop": {
+   "classes": {
+    "SpeedCap": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "step": [
+       "goal",
+       "dt",
+       "max_velocity",
+       "max_acceleration"
+      ]
+     },
+     "properties": []
+    },
+    "Teleop": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "run": [
+       "stop_event"
+      ]
+     },
+     "properties": []
+    },
+    "TeleopStep": {
+     "constants": [],
+     "fields": [
+      "elapsed_s",
+      "leader",
+      "command",
+      "syncing"
+     ],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [
+    "MAX_STEP_S"
+   ],
+   "functions": {
+    "run_many": [
+     "teleops",
+     "stop_event"
+    ]
+   }
+  },
+  "testing": {
+   "classes": {
+    "SimulatedMotors": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "fault": [
+       "joint",
+       "faulted"
+      ],
+      "motor": [
+       "joint"
+      ],
+      "offline": [
+       "joint",
+       "offline"
+      ],
+      "set_temperature": [
+       "joint",
+       "celsius"
+      ],
+      "watchdog_timeout": [
+       "joint"
+      ]
+     },
+     "properties": [
+      "positions"
+     ]
+    }
+   },
+   "constants": [
+    "SIM_CONTROL_RATE_HZ",
+    "SIM_FEEDBACK_TIMEOUT",
+    "SIM_MAX_TICK_PERIODS"
+   ],
+   "functions": {
+    "simulated_arm": [
+     "config",
+     "positions",
+     "options"
+    ],
+    "simulated_backend": [
+     "config",
+     "positions",
+     "options"
+    ],
+    "simulated_group": [
+     "rig",
+     "names",
+     "positions",
+     "options"
+    ],
+    "simulation_timing": [
+     "config"
+    ]
+   }
+  },
+  "trajectory_ik": {
+   "classes": {
+    "IKResult": {
+     "constants": [],
+     "fields": [
+      "q",
+      "q_solution",
+      "pos_err",
+      "rot_err",
+      "capped"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "IKStream": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "feed": [
+       "targets",
+       "method"
+      ],
+      "reset": [
+       "q_last"
+      ],
+      "step": [
+       "pose"
+      ]
+     },
+     "properties": [
+      "q_last"
+     ]
+    },
+    "IKWeights": {
+     "constants": [],
+     "fields": [
+      "pos",
+      "ori",
+      "limit",
+      "last_pose",
+      "vel",
+      "acc",
+      "jerk",
+      "history",
+      "limit_margin"
+     ],
+     "methods": {},
+     "properties": []
+    },
+    "TrajectoryIK": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "bounds": [
+       "q_last"
+      ],
+      "cap": [
+       "q_solution",
+       "q_last",
+       "max_step"
+      ],
+      "from_config": [
+       "config",
+       "weights",
+       "chain"
+      ],
+      "max_step": [
+       "rate_hz",
+       "speed_cap"
+      ],
+      "solve": [
+       "targets",
+       "q_last",
+       "q_before",
+       "rate_hz",
+       "speed_cap",
+       "method"
+      ],
+      "solve_tick": [
+       "target",
+       "q_prev",
+       "lo",
+       "hi"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [
+    "FEW_JOINTS_ORI_SCALE",
+    "JOINT_FIELDS",
+    "SOLVERS",
+    "WEIGHT_FIELDS"
+   ],
+   "functions": {
+    "extend_poses": [
+     "T",
+     "rows",
+     "k"
+    ],
+    "from_config": [
+     "config",
+     "chain",
+     "solver",
+     "weights"
+    ],
+    "pose_residual": [
+     "targets",
+     "poses",
+     "jacobians"
+    ],
+    "savgol": [
+     "x",
+     "window",
+     "polyorder"
+    ],
+    "seam_blend": [
+     "q",
+     "q_from",
+     "ticks",
+     "lo",
+     "hi",
+     "max_step"
+    ],
+    "smooth_poses": [
+     "T",
+     "window",
+     "polyorder"
+    ],
+    "so3_exp": [
+     "w"
+    ],
+    "so3_log": [
+     "R"
+    ],
+    "solve_path": [
+     "ik",
+     "poses",
+     "q_last",
+     "rate_hz",
+     "speed_cap",
+     "chunk"
+    ],
+    "straight_line": [
+     "start",
+     "goal",
+     "ticks",
+     "ease"
+    ],
+    "tool_errors": [
+     "chain",
+     "q",
+     "targets"
+    ]
+   }
+  },
+  "transport.base": {
+   "classes": {
+    "CanBackend": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "open": [],
+      "send": [
+       "can_id",
+       "data",
+       "extended"
+      ],
+      "set_recv_callback": [
+       "cb"
+      ]
+     },
+     "properties": [
+      "recv_callback"
+     ]
+    },
+    "CanId": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {
+    "create_backend": [
+     "name",
+     "kwargs"
+    ]
+   }
+  },
+  "transport.gs_usb": {
+   "classes": {
+    "GsUsbBackend": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "open": [],
+      "send": [
+       "can_id",
+       "data",
+       "extended"
+      ]
+     },
+     "properties": [
+      "port"
+     ]
+    }
+   },
+   "constants": [
+    "BREQ_BITTIMING",
+    "BREQ_BT_CONST",
+    "BREQ_MODE",
+    "CAN_EFF_FLAG",
+    "CAN_EFF_MASK",
+    "CAN_ERR_FLAG",
+    "CAN_RTR_FLAG",
+    "ECHO_RX",
+    "EP_IN",
+    "EP_OUT",
+    "FLAG_OVERFLOW",
+    "GS_USB_IDS",
+    "INSTALL_HINT",
+    "INTERFACE",
+    "MAX_IN_FLIGHT",
+    "MODE_RESET",
+    "MODE_START",
+    "SAMPLE_POINT"
+   ],
+   "functions": {
+    "bit_timing": [
+     "fclk",
+     "bitrate",
+     "tseg1_min",
+     "tseg1_max",
+     "tseg2_min",
+     "tseg2_max",
+     "sjw_max",
+     "brp_min",
+     "brp_max",
+     "brp_inc"
+    ],
+    "list_adapters": [
+     "devices"
+    ],
+    "parse_port": [
+     "port"
+    ]
+   }
+  },
+  "transport.mock": {
+   "classes": {
+    "MockBackend": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "inject": [
+       "can_id",
+       "data",
+       "extended"
+      ],
+      "open": [],
+      "send": [
+       "can_id",
+       "data",
+       "extended"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {}
+  },
+  "transport.slcan_serial": {
+   "classes": {
+    "SlcanFrameParser": {
+     "constants": [],
+     "fields": [],
+     "methods": {
+      "feed": [
+       "chunk"
+      ]
+     },
+     "properties": []
+    },
+    "SlcanSerialBackend": {
+     "constants": [
+      "BITRATE_COMMANDS"
+     ],
+     "fields": [],
+     "methods": {
+      "close": [],
+      "open": [],
+      "send": [
+       "can_id",
+       "data",
+       "extended"
+      ]
+     },
+     "properties": []
+    }
+   },
+   "constants": [],
+   "functions": {
+    "slcan_encode": [
+     "can_id",
+     "data",
+     "extended"
+    ]
+   }
+  }
+ }
+}

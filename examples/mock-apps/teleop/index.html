@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Teleoperation</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Teleoperation</h1>
+    <p>A Star Arm 102 leader (simulated: the sliders turn its servos) drives a Metal or Maker follower arm.</p>
+    <fieldset>
+      <legend>Follower</legend>
+      <select id="product" aria-label="Arm">
+        <option value="metal">Metal Arm</option>
+        <option value="maker">Maker Arm</option>
+      </select>
+      <button id="connect">Connect</button>
+      <button id="enable" disabled>Enable (hold)</button>
+      <button id="rest" disabled>Rest and release</button>
+      <button id="estop" class="stop" disabled>E-stop</button>
+    </fieldset>
+    <fieldset>
+      <legend>Leader (simulated Star Arm 102)</legend>
+      <div id="leader">Connect the follower first.</div>
+    </fieldset>
+    <fieldset>
+      <legend>Teleop</legend>
+      <label>Speed cap <input id="cap" type="number" step="0.1" min="0" placeholder="none" /> rad/s</label>
+      <button id="start" disabled>Start</button>
+      <button id="stop" disabled>Stop</button>
+      <p>Teleop: <span id="teleop" class="state">idle</span> <span id="gap"></span></p>
+      <p>Leader targets: <code id="targets">-</code></p>
+    </fieldset>
+    <p>State: <span id="state" class="state">not connected</span> <span id="fault"></span></p>
+    <p id="message" role="status"></p>
+    <table>
+      <thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead>
+      <tbody id="joints"></tbody>
+    </table>
+    <pre id="log" aria-label="Log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

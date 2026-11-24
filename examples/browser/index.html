@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MakerMods arm example</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 24px auto; max-width: 720px; padding: 0 16px; }
+      button, select { font: inherit; padding: 6px 12px; margin: 4px 4px 4px 0; }
+      pre { background: #8881; padding: 12px; border-radius: 6px; overflow-x: auto; min-height: 3em; }
+      .stop { background: #c62828; color: #fff; border: 0; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>MakerMods arm example</h1>
+    <p>
+      <select id="product">
+        <option value="metal">Metal Arm</option>
+        <option value="maker">Maker Arm</option>
+      </select>
+      <button id="connect">Connect</button>
+      <button id="enable" disabled>Enable (hold)</button>
+      <button id="wave" disabled>Wave wrist ±10°</button>
+      <button id="rest" disabled>Rest and release</button>
+      <button id="estop" class="stop" disabled>E-stop (drops the arm)</button>
+    </p>
+    <pre id="status">not connected</pre>
+    <h2>Loop timing with simulated motors</h2>
+    <p><button id="timing">Measure in this page and in a worker</button></p>
+    <pre id="result"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

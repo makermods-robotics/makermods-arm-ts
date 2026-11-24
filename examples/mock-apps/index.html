@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MakerMods mock apps</title>
+    <link rel="stylesheet" href="./shared/style.css" />
+  </head>
+  <body>
+    <h1>MakerMods mock apps</h1>
+    <p>
+      Small applications built on the arm SDKs. Add <code>?mock=metal</code>, <code>?mock=maker</code> or
+      <code>?mock=so101</code> to run one on simulated hardware (<code>&amp;adapters=2</code> plugs in two adapters,
+      <code>&amp;link=slcan</code> puts the arm behind an SLCAN adapter on a serial port) instead of a real adapter.
+    </p>
+    <ul>
+      <li><a href="./arm-console/?mock=metal">Arm console</a>: connect, hold, move, sine, rest, e-stop (Metal or Maker).</li>
+      <li><a href="./arm-console/?mock=maker&amp;link=slcan">Arm console on SLCAN</a>: the same console on an SLCAN adapter over Web Serial.</li>
+      <li><a href="./arm-worker/?mock=metal">Arm in a worker</a>: the same arm and its control loop in a Web Worker.</li>
+      <li><a href="./teleop/?mock=metal">Teleoperation</a>: a Star Arm 102 leader (simulated, on sliders) drives a follower.</li>
+      <li><a href="./arm-follow/?mock=metal&amp;adapters=2">Arm-to-arm following</a>: a floated leader arm and a follower on two adapters.</li>
+      <li><a href="./rig/?mock=metal&amp;adapters=2">Two-arm robot</a>: a rig of two arms driven as a group, bimanual sine and teleop.</li>
+      <li><a href="./cameras/">Cameras</a>: list, open, read frames and encode JPEGs with the SDK's Camera.</li>
+      <li><a href="./timing/">Loop timing bench</a>: control-loop rate on simulated motors, in the page and in a worker.</li>
+      <li><a href="./so101/?mock=so101">SO-101</a>: pick the serial port, calibrate, enable, move, wiggle, rest.</li>
+      <li><a href="./playground/?mock=metal">Mock playground</a>: camera frames to a Dream policy through a proxy, chunks to the arm.</li>
+    </ul>
+  </body>
+</html>

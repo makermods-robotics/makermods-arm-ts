@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cameras</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+    <style>
+      video, #snapshot { width: 320px; background: #000; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Cameras</h1>
+    <p>The SDK's Camera: list the cameras, open one, read frames and their age, encode a JPEG.</p>
+    <fieldset>
+      <legend>Cameras</legend>
+      <button id="list">List cameras</button>
+      <select id="camera" aria-label="Camera"></select>
+      <button id="open" disabled>Open</button>
+      <button id="close" disabled>Close</button>
+      <table><thead><tr><th>Id</th><th>Name</th></tr></thead><tbody id="cameras"></tbody></table>
+    </fieldset>
+    <fieldset>
+      <legend>Frames</legend>
+      <button id="read" disabled>Read frame</button>
+      <label>JPEG <input id="jpeg-width" type="number" value="320" /> x <input id="jpeg-height" type="number" value="176" /></label>
+      <button id="jpeg" disabled>Encode JPEG</button>
+      <table>
+        <tbody>
+          <tr><th>Frame</th><td id="frame">-</td></tr>
+          <tr><th>Newest frame age</th><td id="age">-</td></tr>
+          <tr><th>Frames read</th><td id="reads">0</td></tr>
+          <tr><th>JPEG</th><td id="jpeg-info">-</td></tr>
+        </tbody>
+      </table>
+    </fieldset>
+    <video id="preview" muted playsinline></video>
+    <img id="snapshot" alt="Last JPEG" />
+    <p id="message" role="status"></p>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

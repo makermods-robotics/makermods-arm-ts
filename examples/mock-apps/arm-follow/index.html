@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arm-to-arm following</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Arm-to-arm following</h1>
+    <p>
+      Two arms of the same kind on two adapters: the leader floats (it holds its own weight while a hand moves it) and
+      the follower copies it.
+    </p>
+    <fieldset>
+      <legend>Arms</legend>
+      <select id="product" aria-label="Arm">
+        <option value="metal">Metal Arms</option>
+        <option value="maker">Maker Arms</option>
+      </select>
+      <button id="connect-leader">Connect leader</button> <span id="leader-port">-</span>
+      <button id="connect-follower">Connect follower</button> <span id="follower-port">-</span>
+    </fieldset>
+    <fieldset>
+      <legend>Following</legend>
+      <button id="start" disabled>Start</button>
+      <button id="stop" disabled>Stop</button>
+      <button id="rest" disabled>Rest and release both</button>
+      <button id="estop" class="stop" disabled>E-stop both</button>
+      <p>Teleop: <span id="teleop" class="state">idle</span></p>
+    </fieldset>
+    <p id="message" role="status"></p>
+    <div class="arms">
+      <div>
+        <h2>Leader: <span id="leader-state" class="state">not connected</span></h2>
+        <table><thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead><tbody id="leader-joints"></tbody></table>
+      </div>
+      <div>
+        <h2>Follower: <span id="follower-state" class="state">not connected</span></h2>
+        <table><thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead><tbody id="follower-joints"></tbody></table>
+      </div>
+    </div>
+    <pre id="log" aria-label="Log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

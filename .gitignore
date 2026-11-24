@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.worktrees/
+__pycache__/
+test-results/
+playwright-report/
+TESTING-TODO.md
+.dist-check/
+tools/hw/
+examples/node/adapter-check.ts
+examples/node/scan-two.ts
+*.log
+*.jsonl
+*.csv
+*.mp4
+*.webm

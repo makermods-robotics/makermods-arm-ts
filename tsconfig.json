@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@makermods/arm-core": ["./packages/arm-core/src/index.ts"],
+      "@makermods/arm-core/*": ["./packages/arm-core/src/*.ts", "./packages/arm-core/src/*/index.ts"],
+      "@makermods/metal-arm": ["./packages/metal-arm/src/index.ts"],
+      "@makermods/metal-arm/*": ["./packages/metal-arm/src/*.ts"],
+      "@makermods/maker-arm": ["./packages/maker-arm/src/index.ts"],
+      "@makermods/maker-arm/*": ["./packages/maker-arm/src/*.ts"],
+      "@makermods/so101": ["./packages/so101/src/index.ts"],
+      "@makermods/so101/*": ["./packages/so101/src/*.ts"]
+    }
+  },
+  "include": ["packages/*/src", "packages/*/test", "examples", "vitest.config.ts"],
+  "exclude": ["examples/mock-apps"]
+}

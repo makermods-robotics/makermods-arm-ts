@@ -1,0 +1,7060 @@
+{
+ "meta": {
+  "generated_by": "tools/gen_gs_usb.py",
+  "source": "maker_arm/transport/gs_usb.py",
+  "sdk_commit": "0ca54de",
+  "python": "3.12.14"
+ },
+ "constants": {
+  "MAX_IN_FLIGHT": 10,
+  "EP_OUT": 2,
+  "EP_IN": 129,
+  "ids": [
+   [
+    4617,
+    8995
+   ],
+   [
+    4617,
+    51713
+   ],
+   [
+    5840,
+    4280
+   ],
+   [
+    7378,
+    24687
+   ],
+   [
+    7504,
+    24687
+   ]
+  ]
+ },
+ "limits": {
+  "candlelight_f072": [
+   1,
+   16,
+   1,
+   8,
+   4,
+   1,
+   1024,
+   1
+  ],
+  "fdcan_g431": [
+   1,
+   256,
+   1,
+   128,
+   128,
+   1,
+   512,
+   1
+  ],
+  "brp_step_2": [
+   2,
+   16,
+   1,
+   8,
+   4,
+   2,
+   64,
+   2
+  ],
+  "tiny": [
+   1,
+   4,
+   1,
+   2,
+   1,
+   1,
+   1,
+   1
+  ]
+ },
+ "bit_timing": [
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 83333,
+   "error": "adapter clock 7000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 800000,
+   "error": "adapter clock 7000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 7000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 83333,
+   "error": "adapter clock 8000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 8000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    5,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    100
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 83333,
+   "error": "adapter clock 16000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 16000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    150
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    75
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 83333,
+   "error": "adapter clock 24000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 24000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    8,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    250
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    125
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 83333,
+   "error": "adapter clock 25000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 800000,
+   "error": "adapter clock 25000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 25000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    2,
+    1,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    100
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 83333,
+   "error": "adapter clock 36000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 36000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    250
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    125
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 83333,
+   "error": "adapter clock 40000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 40000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    280
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    140
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    56
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 83333,
+   "error": "adapter clock 42000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    28
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    21
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 800000,
+   "error": "adapter clock 42000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 42000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    300
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    150
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    60
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 83333,
+   "error": "adapter clock 48000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 48000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    375
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    75
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 83333,
+   "error": "adapter clock 60000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 60000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    400
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    80
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 83333,
+   "error": "adapter clock 64000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 64000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    400
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    80
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 83333,
+   "error": "adapter clock 72000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 72000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    500
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    250
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    100
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 83333,
+   "error": "adapter clock 80000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 80000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    525
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    280
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    105
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 83333,
+   "error": "adapter clock 84000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    56
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    42
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    21
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    7
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 84000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    750
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    375
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    150
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 83333,
+   "error": "adapter clock 120000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    75
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    60
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 120000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    1000
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    500
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 83333,
+   "error": "adapter clock 160000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    100
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    80
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 160000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    1000
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    500
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    200
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 83333,
+   "error": "adapter clock 170000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    100
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    80
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 800000,
+   "error": "adapter clock 170000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "candlelight_f072",
+   "fclk": 170000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    151,
+    22,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    151,
+    22,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    120,
+    18,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 83333,
+   "error": "adapter clock 7000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    59,
+    9,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    47,
+    7,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    22,
+    4,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 800000,
+   "error": "adapter clock 7000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 7000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 83333,
+   "error": "adapter clock 8000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    68,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    54,
+    8,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    26,
+    4,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 8000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    5,
+    1,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 83333,
+   "error": "adapter clock 16000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    110,
+    16,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    54,
+    8,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    26,
+    4,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    16,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 16000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 83333,
+   "error": "adapter clock 24000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    166,
+    24,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    82,
+    12,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    40,
+    6,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    24,
+    4,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 24000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    19,
+    3,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 83333,
+   "error": "adapter clock 25000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    86,
+    12,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    42,
+    6,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 800000,
+   "error": "adapter clock 25000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 25000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    20,
+    3,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    195,
+    28,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 83333,
+   "error": "adapter clock 36000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    156,
+    22,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    250,
+    36,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    124,
+    18,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    61,
+    9,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    37,
+    6,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 36000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    30,
+    4,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 83333,
+   "error": "adapter clock 40000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    68,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    42,
+    6,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 40000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    33,
+    5,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    182,
+    26,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 83333,
+   "error": "adapter clock 42000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    182,
+    26,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    145,
+    21,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    145,
+    21,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    72,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 800000,
+   "error": "adapter clock 42000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 42000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    35,
+    5,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 83333,
+   "error": "adapter clock 48000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    166,
+    24,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    166,
+    24,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    82,
+    12,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    50,
+    8,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 48000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    40,
+    6,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 83333,
+   "error": "adapter clock 60000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    103,
+    15,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    64,
+    9,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 60000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    50,
+    8,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    222,
+    32,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    222,
+    32,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 83333,
+   "error": "adapter clock 64000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    222,
+    32,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    222,
+    32,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    110,
+    16,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    68,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 64000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    54,
+    8,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    250,
+    36,
+    1,
+    25
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    250,
+    36,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 83333,
+   "error": "adapter clock 72000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    250,
+    36,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    250,
+    36,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    124,
+    18,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    77,
+    11,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 72000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    61,
+    9,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 83333,
+   "error": "adapter clock 80000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    86,
+    12,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 80000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    68,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    15
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 83333,
+   "error": "adapter clock 84000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    243,
+    35,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    194,
+    28,
+    1,
+    3
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    145,
+    21,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    145,
+    21,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    90,
+    13,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 84000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    72,
+    10,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    48
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 83333,
+   "error": "adapter clock 120000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    208,
+    30,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    129,
+    19,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 120000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    103,
+    15,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    64
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 83333,
+   "error": "adapter clock 160000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    222,
+    32,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 160000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    138,
+    20,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    68
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    217,
+    31,
+    1,
+    34
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    173,
+    25,
+    1,
+    17
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 83333,
+   "error": "adapter clock 170000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    147,
+    21,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    236,
+    34,
+    1,
+    5
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    147,
+    21,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    147,
+    21,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 800000,
+   "error": "adapter clock 170000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "fdcan_g431",
+   "fclk": 170000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    147,
+    21,
+    1,
+    1
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 83333,
+   "error": "adapter clock 7000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 800000,
+   "error": "adapter clock 7000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 7000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 7000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 10000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 83333,
+   "error": "adapter clock 8000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    5,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    2,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 8000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    1,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 10000,
+   "error": "adapter clock 16000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 20000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 83333,
+   "error": "adapter clock 16000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 16000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    5,
+    1,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 10000,
+   "error": "adapter clock 24000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 20000,
+   "error": "adapter clock 24000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 83333,
+   "error": "adapter clock 24000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    8,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 24000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    8,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 10000,
+   "error": "adapter clock 25000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 20000,
+   "error": "adapter clock 25000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 83333,
+   "error": "adapter clock 25000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    2,
+    1,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    2,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 800000,
+   "error": "adapter clock 25000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 25000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 25000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 10000,
+   "error": "adapter clock 36000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 20000,
+   "error": "adapter clock 36000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 83333,
+   "error": "adapter clock 36000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 800000,
+   "error": "adapter clock 36000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 36000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    2
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 10000,
+   "error": "adapter clock 40000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 20000,
+   "error": "adapter clock 40000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 83333,
+   "error": "adapter clock 40000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    2,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 40000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 10000,
+   "error": "adapter clock 42000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 20000,
+   "error": "adapter clock 42000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    56
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 83333,
+   "error": "adapter clock 42000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    28
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 800000,
+   "error": "adapter clock 42000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 42000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    4,
+    1,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 10000,
+   "error": "adapter clock 48000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 20000,
+   "error": "adapter clock 48000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 50000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    60
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 83333,
+   "error": "adapter clock 48000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 48000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    8,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 10000,
+   "error": "adapter clock 60000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 20000,
+   "error": "adapter clock 60000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 50000,
+   "error": "adapter clock 60000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 83333,
+   "error": "adapter clock 60000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 800000,
+   "error": "adapter clock 60000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 60000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 10000,
+   "error": "adapter clock 64000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 20000,
+   "error": "adapter clock 64000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 50000,
+   "error": "adapter clock 64000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 83333,
+   "error": "adapter clock 64000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 64000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 10000,
+   "error": "adapter clock 72000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 20000,
+   "error": "adapter clock 72000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 50000,
+   "error": "adapter clock 72000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 83333,
+   "error": "adapter clock 72000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    32
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 72000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    14,
+    2,
+    1,
+    4
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 10000,
+   "error": "adapter clock 80000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 20000,
+   "error": "adapter clock 80000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 50000,
+   "error": "adapter clock 80000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 83333,
+   "error": "adapter clock 80000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    50
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 80000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 10000,
+   "error": "adapter clock 84000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 20000,
+   "error": "adapter clock 84000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 50000,
+   "error": "adapter clock 84000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 83333,
+   "error": "adapter clock 84000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 100000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    56
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    42
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    24
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    12
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 800000,
+   "error": "adapter clock 84000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 84000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    10,
+    2,
+    1,
+    6
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 10000,
+   "error": "adapter clock 120000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 20000,
+   "error": "adapter clock 120000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 50000,
+   "error": "adapter clock 120000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 83333,
+   "error": "adapter clock 120000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 100000,
+   "error": "adapter clock 120000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 125000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    60
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    30
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    16
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 120000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    11,
+    2,
+    1,
+    8
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 10000,
+   "error": "adapter clock 160000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 20000,
+   "error": "adapter clock 160000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 50000,
+   "error": "adapter clock 160000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 83333,
+   "error": "adapter clock 160000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 100000,
+   "error": "adapter clock 160000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 125000,
+   "error": "adapter clock 160000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 800000,
+   "timing": [
+    1,
+    7,
+    1,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 160000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    12,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 10000,
+   "error": "adapter clock 170000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 20000,
+   "error": "adapter clock 170000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 50000,
+   "error": "adapter clock 170000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 83333,
+   "error": "adapter clock 170000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 100000,
+   "error": "adapter clock 170000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 125000,
+   "error": "adapter clock 170000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 250000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    40
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 500000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    20
+   ]
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 800000,
+   "error": "adapter clock 170000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "brp_step_2",
+   "fclk": 170000000,
+   "bitrate": 1000000,
+   "timing": [
+    1,
+    13,
+    2,
+    1,
+    10
+   ]
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 10000,
+   "error": "adapter clock 7000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 20000,
+   "error": "adapter clock 7000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 50000,
+   "error": "adapter clock 7000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 83333,
+   "error": "adapter clock 7000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 100000,
+   "error": "adapter clock 7000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 125000,
+   "error": "adapter clock 7000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 250000,
+   "error": "adapter clock 7000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 500000,
+   "error": "adapter clock 7000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 800000,
+   "error": "adapter clock 7000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 7000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 7000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 10000,
+   "error": "adapter clock 8000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 20000,
+   "error": "adapter clock 8000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 50000,
+   "error": "adapter clock 8000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 83333,
+   "error": "adapter clock 8000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 100000,
+   "error": "adapter clock 8000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 125000,
+   "error": "adapter clock 8000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 250000,
+   "error": "adapter clock 8000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 500000,
+   "error": "adapter clock 8000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 800000,
+   "error": "adapter clock 8000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 8000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 8000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 10000,
+   "error": "adapter clock 16000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 20000,
+   "error": "adapter clock 16000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 50000,
+   "error": "adapter clock 16000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 83333,
+   "error": "adapter clock 16000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 100000,
+   "error": "adapter clock 16000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 125000,
+   "error": "adapter clock 16000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 250000,
+   "error": "adapter clock 16000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 500000,
+   "error": "adapter clock 16000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 800000,
+   "error": "adapter clock 16000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 16000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 16000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 10000,
+   "error": "adapter clock 24000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 20000,
+   "error": "adapter clock 24000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 50000,
+   "error": "adapter clock 24000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 83333,
+   "error": "adapter clock 24000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 100000,
+   "error": "adapter clock 24000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 125000,
+   "error": "adapter clock 24000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 250000,
+   "error": "adapter clock 24000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 500000,
+   "error": "adapter clock 24000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 800000,
+   "error": "adapter clock 24000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 24000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 24000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 10000,
+   "error": "adapter clock 25000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 20000,
+   "error": "adapter clock 25000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 50000,
+   "error": "adapter clock 25000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 83333,
+   "error": "adapter clock 25000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 100000,
+   "error": "adapter clock 25000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 125000,
+   "error": "adapter clock 25000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 250000,
+   "error": "adapter clock 25000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 500000,
+   "error": "adapter clock 25000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 800000,
+   "error": "adapter clock 25000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 25000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 25000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 10000,
+   "error": "adapter clock 36000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 20000,
+   "error": "adapter clock 36000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 50000,
+   "error": "adapter clock 36000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 83333,
+   "error": "adapter clock 36000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 100000,
+   "error": "adapter clock 36000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 125000,
+   "error": "adapter clock 36000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 250000,
+   "error": "adapter clock 36000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 500000,
+   "error": "adapter clock 36000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 800000,
+   "error": "adapter clock 36000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 36000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 36000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 10000,
+   "error": "adapter clock 40000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 20000,
+   "error": "adapter clock 40000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 50000,
+   "error": "adapter clock 40000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 83333,
+   "error": "adapter clock 40000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 100000,
+   "error": "adapter clock 40000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 125000,
+   "error": "adapter clock 40000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 250000,
+   "error": "adapter clock 40000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 500000,
+   "error": "adapter clock 40000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 800000,
+   "error": "adapter clock 40000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 40000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 40000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 10000,
+   "error": "adapter clock 42000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 20000,
+   "error": "adapter clock 42000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 50000,
+   "error": "adapter clock 42000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 83333,
+   "error": "adapter clock 42000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 100000,
+   "error": "adapter clock 42000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 125000,
+   "error": "adapter clock 42000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 250000,
+   "error": "adapter clock 42000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 500000,
+   "error": "adapter clock 42000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 800000,
+   "error": "adapter clock 42000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 42000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 42000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 10000,
+   "error": "adapter clock 48000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 20000,
+   "error": "adapter clock 48000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 50000,
+   "error": "adapter clock 48000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 83333,
+   "error": "adapter clock 48000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 100000,
+   "error": "adapter clock 48000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 125000,
+   "error": "adapter clock 48000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 250000,
+   "error": "adapter clock 48000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 500000,
+   "error": "adapter clock 48000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 800000,
+   "error": "adapter clock 48000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 48000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 48000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 10000,
+   "error": "adapter clock 60000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 20000,
+   "error": "adapter clock 60000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 50000,
+   "error": "adapter clock 60000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 83333,
+   "error": "adapter clock 60000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 100000,
+   "error": "adapter clock 60000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 125000,
+   "error": "adapter clock 60000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 250000,
+   "error": "adapter clock 60000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 500000,
+   "error": "adapter clock 60000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 800000,
+   "error": "adapter clock 60000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 60000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 60000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 10000,
+   "error": "adapter clock 64000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 20000,
+   "error": "adapter clock 64000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 50000,
+   "error": "adapter clock 64000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 83333,
+   "error": "adapter clock 64000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 100000,
+   "error": "adapter clock 64000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 125000,
+   "error": "adapter clock 64000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 250000,
+   "error": "adapter clock 64000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 500000,
+   "error": "adapter clock 64000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 800000,
+   "error": "adapter clock 64000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 64000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 64000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 10000,
+   "error": "adapter clock 72000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 20000,
+   "error": "adapter clock 72000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 50000,
+   "error": "adapter clock 72000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 83333,
+   "error": "adapter clock 72000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 100000,
+   "error": "adapter clock 72000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 125000,
+   "error": "adapter clock 72000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 250000,
+   "error": "adapter clock 72000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 500000,
+   "error": "adapter clock 72000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 800000,
+   "error": "adapter clock 72000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 72000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 72000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 10000,
+   "error": "adapter clock 80000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 20000,
+   "error": "adapter clock 80000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 50000,
+   "error": "adapter clock 80000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 83333,
+   "error": "adapter clock 80000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 100000,
+   "error": "adapter clock 80000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 125000,
+   "error": "adapter clock 80000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 250000,
+   "error": "adapter clock 80000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 500000,
+   "error": "adapter clock 80000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 800000,
+   "error": "adapter clock 80000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 80000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 80000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 10000,
+   "error": "adapter clock 84000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 20000,
+   "error": "adapter clock 84000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 50000,
+   "error": "adapter clock 84000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 83333,
+   "error": "adapter clock 84000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 100000,
+   "error": "adapter clock 84000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 125000,
+   "error": "adapter clock 84000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 250000,
+   "error": "adapter clock 84000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 500000,
+   "error": "adapter clock 84000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 800000,
+   "error": "adapter clock 84000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 84000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 84000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 10000,
+   "error": "adapter clock 120000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 20000,
+   "error": "adapter clock 120000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 50000,
+   "error": "adapter clock 120000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 83333,
+   "error": "adapter clock 120000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 100000,
+   "error": "adapter clock 120000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 125000,
+   "error": "adapter clock 120000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 250000,
+   "error": "adapter clock 120000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 500000,
+   "error": "adapter clock 120000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 800000,
+   "error": "adapter clock 120000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 120000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 120000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 10000,
+   "error": "adapter clock 160000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 20000,
+   "error": "adapter clock 160000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 50000,
+   "error": "adapter clock 160000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 83333,
+   "error": "adapter clock 160000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 100000,
+   "error": "adapter clock 160000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 125000,
+   "error": "adapter clock 160000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 250000,
+   "error": "adapter clock 160000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 500000,
+   "error": "adapter clock 160000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 800000,
+   "error": "adapter clock 160000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 160000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 160000000 Hz cannot produce 1000000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 10000,
+   "error": "adapter clock 170000000 Hz cannot produce 10000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 20000,
+   "error": "adapter clock 170000000 Hz cannot produce 20000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 50000,
+   "error": "adapter clock 170000000 Hz cannot produce 50000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 83333,
+   "error": "adapter clock 170000000 Hz cannot produce 83333 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 100000,
+   "error": "adapter clock 170000000 Hz cannot produce 100000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 125000,
+   "error": "adapter clock 170000000 Hz cannot produce 125000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 250000,
+   "error": "adapter clock 170000000 Hz cannot produce 250000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 500000,
+   "error": "adapter clock 170000000 Hz cannot produce 500000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 800000,
+   "error": "adapter clock 170000000 Hz cannot produce 800000 bit/s"
+  },
+  {
+   "limits": "tiny",
+   "fclk": 170000000,
+   "bitrate": 1000000,
+   "error": "adapter clock 170000000 Hz cannot produce 1000000 bit/s"
+  }
+ ],
+ "lifecycle": {
+  "open": [
+   [
+    "claim",
+    0
+   ],
+   [
+    "in",
+    4,
+    0,
+    0,
+    40,
+    100
+   ],
+   [
+    "out",
+    1,
+    0,
+    0,
+    "010000000C000000020000000100000003000000",
+    100
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0100000000000000",
+    100
+   ]
+  ],
+  "sends": [
+   {
+    "id": 2047,
+    "data": "0700CC0000000000",
+    "extended": false,
+    "bytes": "00000000FF070000080000000700CC0000000000"
+   },
+   {
+    "id": 0,
+    "data": "",
+    "extended": false,
+    "bytes": "0100000000000000000000000000000000000000"
+   },
+   {
+    "id": 291,
+    "data": "01",
+    "extended": false,
+    "bytes": "0200000023010000010000000100000000000000"
+   },
+   {
+    "id": 19088743,
+    "data": "0102",
+    "extended": true,
+    "bytes": "0300000067452381020000000102000000000000"
+   },
+   {
+    "id": 536870911,
+    "data": "FFFFFFFFFFFFFFFF",
+    "extended": true,
+    "bytes": "04000000FFFFFF9F08000000FFFFFFFFFFFFFFFF"
+   },
+   {
+    "id": 74565,
+    "data": "AABBCC",
+    "extended": false,
+    "bytes": "050000004503000003000000AABBCC0000000000"
+   },
+   {
+    "id": 4294967295,
+    "data": "11223344556677",
+    "extended": true,
+    "bytes": "06000000FFFFFF9F070000001122334455667700"
+   }
+  ],
+  "close": [
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0000000000000000",
+    100
+   ],
+   [
+    "release",
+    0
+   ],
+   [
+    "dispose"
+   ]
+  ],
+  "bitrate_500k_open": [
+   [
+    "claim",
+    0
+   ],
+   [
+    "in",
+    4,
+    0,
+    0,
+    40,
+    100
+   ],
+   [
+    "out",
+    1,
+    0,
+    0,
+    "010000000C000000020000000100000006000000",
+    100
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0100000000000000",
+    100
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0000000000000000",
+    100
+   ],
+   [
+    "release",
+    0
+   ],
+   [
+    "dispose"
+   ]
+  ],
+  "fclk_80mhz_open": [
+   [
+    "claim",
+    0
+   ],
+   [
+    "in",
+    4,
+    0,
+    0,
+    40,
+    100
+   ],
+   [
+    "out",
+    1,
+    0,
+    0,
+    "010000000C000000020000000100000005000000",
+    100
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0100000000000000",
+    100
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0000000000000000",
+    100
+   ],
+   [
+    "release",
+    0
+   ],
+   [
+    "dispose"
+   ]
+  ],
+  "io_timeout_0_25_open": [
+   [
+    "claim",
+    0
+   ],
+   [
+    "in",
+    4,
+    0,
+    0,
+    40,
+    250
+   ],
+   [
+    "out",
+    1,
+    0,
+    0,
+    "010000000C000000020000000100000003000000",
+    250
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0100000000000000",
+    250
+   ],
+   [
+    "out",
+    2,
+    0,
+    0,
+    "0000000000000000",
+    250
+   ],
+   [
+    "release",
+    0
+   ],
+   [
+    "dispose"
+   ]
+  ]
+ },
+ "receives": [
+  {
+   "case": "standard",
+   "bytes": "FFFFFFFF17000000080000000001020304050607",
+   "received": [
+    [
+     23,
+     false,
+     "0001020304050607"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "extended",
+   "bytes": "FFFFFFFFEFCDAB8101000000AA00000000000000",
+   "received": [
+    [
+     28036591,
+     true,
+     "AA"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "echo",
+   "bytes": "0300000011000000080000000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "echo_with_flags",
+   "bytes": "0400000011000000080102000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "error_frame",
+   "bytes": "FFFFFFFF04000020080000000000100000000000",
+   "received": [],
+   "error_frames": 1,
+   "rx_overflows": 0
+  },
+  {
+   "case": "error_frame_overflow",
+   "bytes": "FFFFFFFF04000020080001000000000000000000",
+   "received": [],
+   "error_frames": 1,
+   "rx_overflows": 1
+  },
+  {
+   "case": "other_channel",
+   "bytes": "FFFFFFFF12000000080100000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "fd_flag",
+   "bytes": "FFFFFFFF13000000080002000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "overflow",
+   "bytes": "FFFFFFFF14000000010001000100000000000000",
+   "received": [
+    [
+     20,
+     false,
+     "01"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 1
+  },
+  {
+   "case": "overflow_other_channel",
+   "bytes": "FFFFFFFF14000000010201000100000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 1
+  },
+  {
+   "case": "rtr",
+   "bytes": "FFFFFFFF15000040000000000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "rtr_extended",
+   "bytes": "FFFFFFFF150000C0000000000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "dlc_0",
+   "bytes": "FFFFFFFF16000000000000000000000000000000",
+   "received": [
+    [
+     22,
+     false,
+     ""
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "dlc_15",
+   "bytes": "FFFFFFFF160000000F0000000102030405060708",
+   "received": [
+    [
+     22,
+     false,
+     "0102030405060708"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "standard_high_bits",
+   "bytes": "FFFFFFFFFFFF0000020000000102000000000000",
+   "received": [
+    [
+     2047,
+     false,
+     "0102"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "short",
+   "bytes": "00000000000000000000000000000000000000",
+   "received": [],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "hw_timestamp_24",
+   "bytes": "FFFFFFFF1800000002000000BEEF00000000000001020304",
+   "received": [
+    [
+     24,
+     false,
+     "BEEF"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  },
+  {
+   "case": "two_frames",
+   "bytes": "FFFFFFFF19000000010000000100000000000000FFFFFFFF1A000000010000000200000000000000",
+   "received": [
+    [
+     25,
+     false,
+     "01"
+    ]
+   ],
+   "error_frames": 0,
+   "rx_overflows": 0
+  }
+ ],
+ "parse_port": [
+  {
+   "port": null,
+   "serial": null
+  },
+  {
+   "port": "",
+   "serial": null
+  },
+  {
+   "port": "gs_usb",
+   "serial": null
+  },
+  {
+   "port": "gs_usb:",
+   "serial": null
+  },
+  {
+   "port": "gs_usb:ABC",
+   "serial": "ABC"
+  },
+  {
+   "port": "ABC",
+   "serial": "ABC"
+  },
+  {
+   "port": "207A37AA45465006",
+   "serial": "207A37AA45465006"
+  },
+  {
+   "port": "gs_usb:A B",
+   "error": "expected gs_usb:<USB serial>, got 'gs_usb:A B'"
+  },
+  {
+   "port": "A\tB",
+   "error": "expected gs_usb:<USB serial>, got 'A\\tB'"
+  },
+  {
+   "port": "gs_usb:gs_usb:X",
+   "serial": "gs_usb:X"
+  }
+ ],
+ "selection": [
+  {
+   "serials": [
+    "A1",
+    "B2"
+   ],
+   "port": "gs_usb:B2",
+   "chosen": 1
+  },
+  {
+   "serials": [
+    "A1",
+    "B2"
+   ],
+   "port": null,
+   "error": "expected exactly one gs_usb adapter, found 2; name one as gs_usb:<serial> (see the ports listing)"
+  },
+  {
+   "serials": [
+    "A1",
+    "B2"
+   ],
+   "port": "C3",
+   "error": "no gs_usb adapter with serial 'C3' (found 2 adapter(s)); check the cable and USB permissions. Install pyusb and libusb (Linux: apt install libusb-1.0-0; macOS: brew install libusb; Windows: pip install libusb-package). On Linux without root, allow the adapter with a udev rule such as SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"1d50\", ATTRS{idProduct}==\"606f\", MODE=\"0666\"."
+  },
+  {
+   "serials": [
+    "A1"
+   ],
+   "port": null,
+   "chosen": 0
+  },
+  {
+   "serials": [],
+   "port": null,
+   "error": "expected exactly one gs_usb adapter, found 0; name one as gs_usb:<serial> (see the ports listing)"
+  },
+  {
+   "serials": [],
+   "port": "gs_usb:A1",
+   "error": "no gs_usb adapter with serial 'A1' (found 0 adapter(s)); check the cable and USB permissions. Install pyusb and libusb (Linux: apt install libusb-1.0-0; macOS: brew install libusb; Windows: pip install libusb-package). On Linux without root, allow the adapter with a udev rule such as SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"1d50\", ATTRS{idProduct}==\"606f\", MODE=\"0666\"."
+  },
+  {
+   "serials": [
+    "A1",
+    "A1"
+   ],
+   "port": "A1",
+   "error": "no gs_usb adapter with serial 'A1' (found 2 adapter(s)); check the cable and USB permissions. Install pyusb and libusb (Linux: apt install libusb-1.0-0; macOS: brew install libusb; Windows: pip install libusb-package). On Linux without root, allow the adapter with a udev rule such as SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"1d50\", ATTRS{idProduct}==\"606f\", MODE=\"0666\"."
+  }
+ ],
+ "never_acknowledged": {
+  "message": "gs_usb:ABC123: 10 frames were never acknowledged on the CAN bus; stopped writing to protect the adapter. Check that the motors are powered and the CAN wiring and bitrate are right, then reconnect",
+  "writes": 10
+ }
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mock playground</title>
+    <link rel="stylesheet" href="../shared/style.css" />
+    <style>
+      video { width: 320px; height: 176px; background: #000; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <nav><a href="../">All apps</a></nav>
+    <h1>Mock playground</h1>
+    <p>
+      A Metal Arm driven by a Dream policy: camera frames and the arm's tool pose go to the policy through your proxy
+      (which holds the API key), and each end-effector chunk it answers is solved to joint targets with the arm's
+      trajectory IK and played to the arm.
+    </p>
+    <fieldset>
+      <legend>Arm</legend>
+      <button id="connect">Connect</button>
+      <button id="estop" class="stop" disabled>E-stop</button>
+      State: <span id="state" class="state">not connected</span> <span id="fault"></span>
+    </fieldset>
+    <fieldset>
+      <legend>Policy</legend>
+      <label>Proxy <input id="proxy" value="/api/dream" size="40" /></label>
+      <label>Prompt <input id="prompt" value="pick up the cube" /></label>
+      <label>Chunks per episode <input id="chunks" type="number" value="3" min="1" max="50" /></label>
+      <br />
+      <button id="run" disabled>Run episode</button>
+      <button id="stop" disabled>Stop</button>
+    </fieldset>
+    <video id="camera" muted playsinline></video>
+    <p>Episode: <span id="phase">idle</span></p>
+    <p id="message" role="status"></p>
+    <table>
+      <tbody>
+        <tr><th>Chunks installed</th><td id="chunks-done">0</td></tr>
+        <tr><th>Rows played</th><td id="rows">0</td></tr>
+        <tr><th>Observations sent</th><td id="observations">0</td></tr>
+        <tr><th>IK miss per chunk (worst row)</th><td id="ik">-</td></tr>
+        <tr><th>Tracking (measured vs commanded, worst)</th><td id="tracking">-</td></tr>
+        <tr><th>Last target (rad)</th><td><code id="last">-</code></td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Joint</th><th>Position (deg)</th><th>Temp (C)</th><th>Torque</th><th>Fault</th></tr></thead>
+      <tbody id="joints"></tbody>
+    </table>
+    <pre id="log" aria-label="Log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+:root { color-scheme: light dark; --stop: #c62828; --ok: #2e7d32; --muted: #8889; }
+body { font: 15px/1.5 system-ui, sans-serif; margin: 24px auto; max-width: 900px; padding: 0 16px; }
+button, select, input { font: inherit; padding: 5px 10px; margin: 3px 3px 3px 0; }
+input[type="number"] { width: 6em; }
+.stop { background: var(--stop); color: #fff; border: 0; border-radius: 4px; }
+fieldset { border: 1px solid var(--muted); border-radius: 6px; margin: 12px 0; }
+table { border-collapse: collapse; margin: 8px 0; }
+th, td { padding: 2px 10px; text-align: right; border-bottom: 1px solid var(--muted); }
+th:first-child { text-align: left; }
+pre { background: #8881; padding: 10px; border-radius: 6px; overflow: auto; max-height: 14em; font-size: 12px; }
+#message[data-kind="error"] { color: var(--stop); font-weight: 600; }
+.state { font-weight: 700; }
+nav a { margin-right: 1em; }
+.servo { display: flex; gap: 8px; align-items: center; }
+.servo input[type="range"] { width: 220px; }
+.arms { display: flex; flex-wrap: wrap; gap: 16px; }
+textarea { font: 12px/1.4 ui-monospace, monospace; width: 100%; }

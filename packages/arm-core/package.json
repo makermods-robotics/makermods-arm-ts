@@ -1,0 +1,44 @@
+{
+  "name": "@makermods/arm-core",
+  "version": "0.1.0",
+  "description": "Shared core of the MakerMods arm SDKs: CAN transports over WebUSB, the arm state machine and safety logic, kinematics and IK.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json"
+  },
+  "peerDependencies": {
+    "usb": "^2.19.2"
+  },
+  "peerDependenciesMeta": {
+    "usb": {
+      "optional": true
+    }
+  }
+}

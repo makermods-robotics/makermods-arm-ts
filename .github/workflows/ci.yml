@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # A few tests run real control loops on the wall clock; a starved runner can trip their
+      # bounds, so a failed test gets one retry.
+      - run: npx vitest run --retry 1
+      - run: npm run build
+
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The mock applications in headless Chromium: fake adapters and simulated motors, no hardware.
+      - run: npx playwright test --retries 1
+      # The built packages, bundled the way an application's bundler sees them.
+      - run: npm run test:dist
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: |
+            playwright-report
+            test-results
+
+  contract:
+    # The generated profiles, API manifests and codec fixtures still match the Python SDKs.
+    runs-on: ubuntu-latest
+    env:
+      MAKER_ARM_SDK_REF: 0ca54de
+      METAL_ARM_SDK_REF: 7d2a3c8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          git clone https://github.com/makermods-robotics/maker-arm-sdk "$HOME/maker-arm-sdk"
+          git -C "$HOME/maker-arm-sdk" checkout "$MAKER_ARM_SDK_REF"
+          git clone https://github.com/makermods-robotics/metal-arm-sdk "$HOME/metal-arm-sdk"
+          git -C "$HOME/metal-arm-sdk" checkout "$METAL_ARM_SDK_REF"
+          python -m pip install --upgrade pip
+          python -m pip install -e "$HOME/maker-arm-sdk" -e "$HOME/metal-arm-sdk"
+      - run: python tools/gen_product_data.py --check
+      - run: python tools/gen_api_manifest.py maker_arm --check
+      - run: python tools/gen_api_manifest.py metal_arm --check

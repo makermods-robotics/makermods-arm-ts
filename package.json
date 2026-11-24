@@ -1,0 +1,28 @@
+{
+  "name": "makermods-arm-ts",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -p tsconfig.json && tsc -p examples/mock-apps/tsconfig.json",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:dist": "npm run build && vite build examples/dist-check --outDir ../../.dist-check --emptyOutDir && node tools/dist_check.mjs .dist-check"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^24.19.2",
+    "@types/w3c-web-serial": "^1.0.8",
+    "@types/w3c-web-usb": "^1.0.10",
+    "serialport": "^13.0.0",
+    "typescript": "^7.0.2",
+    "usb": "^2.19.2",
+    "vitest": "^5.0.3"
+  }
+}
