@@ -127,6 +127,14 @@ class FakeSerial<P extends InfoPort> extends EventTarget {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Holds still until two more position sync reads (instruction 0x82) reached the bus, so the calibration's recording
+ * has seen the pose however late its reads run, as a person holds a joint at its stop (at most 2 s). */
+async function held(rig: So101Rig): Promise<void> {
+  const from = rig.sim.requests.length;
+  const until = performance.now() + 2000;
+  while (rig.sim.requests.slice(from).filter((r) => r[4] === 0x82).length < 2 && performance.now() < until) await sleep(10);
+}
+
 /** By hand: every joint taken end to end through Dream's reference range and back to the middle, as the
  * calibration asks a person to (the servos' homing is read when the recording has started). */
 async function sweep(rig: So101Rig): Promise<void> {
@@ -143,6 +151,7 @@ async function sweep(rig: So101Rig): Promise<void> {
         rig.sim.moveByHand(id, homing + Math.round(from + ((target - from) * k) / steps));
         await sleep(60);
       }
+      await held(rig);
     }
   }
 }
