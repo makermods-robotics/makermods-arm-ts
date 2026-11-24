@@ -142,8 +142,9 @@ buttons.sine.onclick = () =>
       const measured = a.getJointPositions()[i]! - start[i]!;
       lo = Math.min(lo, measured);
       hi = Math.max(hi, measured);
-      // The motor follows the command one control period later: compare with where the sine was then.
-      const due = amplitude * Math.sin((2 * Math.PI * (a.clock.now() - t0 - 1 / a.config.controlRateHz)) / period);
+      // The motor follows the command one control period later: compare with where the sine was then, or with the
+      // last command when the sleep overran a period (the motor cannot be past the newest target).
+      const due = amplitude * Math.sin((2 * Math.PI * Math.min(t, a.clock.now() - t0 - 1 / a.config.controlRateHz)) / period);
       worst = Math.max(worst, Math.abs(measured - due));
     }
     await a.moveTo(start, { timeout: 2 });
