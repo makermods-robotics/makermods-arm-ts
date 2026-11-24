@@ -32,6 +32,8 @@ export default defineConfig({
     ],
   },
   define: { __HAS_DREAMLABS__: JSON.stringify(hasDreamlabs) },
+  // Without the Dream client the playground's app is never loaded, so the dependency scan leaves it out.
+  optimizeDeps: hasDreamlabs ? {} : { entries: ["**/*.html", "!playground/**"] },
   server: {
     // Under the browser tests (MOCK_APPS_TEST=1) a source edited meanwhile must not reload a page mid-test.
     ...(process.env.MOCK_APPS_TEST ? { hmr: false, watch: null } : {}),

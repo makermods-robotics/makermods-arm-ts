@@ -76,7 +76,8 @@ describe("RealClock", () => {
     }
     expect(Math.min(...errors)).toBeGreaterThanOrEqual(0);
     errors.sort((x, y) => x - y);
-    expect(errors[10]!).toBeLessThan(0.001);
+    // Node's timers on the Windows and macOS runners wake ~10 ms late (Windows' tick is 15.6 ms); Linux keeps 1 ms.
+    expect(errors[10]!).toBeLessThan(process.platform === "linux" ? 0.001 : 0.016);
   });
 });
 

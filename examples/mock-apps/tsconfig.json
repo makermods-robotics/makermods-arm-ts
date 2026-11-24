@@ -27,15 +27,6 @@
       ],
       "@makermods/so101/*": [
         "../../packages/so101/src/*.ts"
-      ],
-      "@makermods/dreamlabs": [
-        "../../../dreamlabs-ts/src/index.ts"
-      ],
-      "@makermods/dreamlabs/ik": [
-        "../../../dreamlabs-ts/src/ik/index.ts"
-      ],
-      "@makermods/dreamlabs/*": [
-        "../../../dreamlabs-ts/src/*.ts"
       ]
     }
   },
@@ -44,5 +35,9 @@
     "../../e2e/**/*.ts",
     "../../playwright.config.ts"
   ],
-  "exclude": []
+  "exclude": [
+    "playground",
+    "../../e2e/playground.spec.ts",
+    "../../e2e/dream-server.ts"
+  ]
 }

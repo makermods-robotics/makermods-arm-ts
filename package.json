@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc -p tsconfig.json && tsc -p examples/mock-apps/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p examples/mock-apps/tsconfig.json && node tools/typecheck_dream.mjs",
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:dist": "npm run build && vite build examples/dist-check --outDir ../../.dist-check --emptyOutDir && node tools/dist_check.mjs .dist-check"
