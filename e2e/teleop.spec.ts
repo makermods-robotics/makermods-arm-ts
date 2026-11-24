@@ -7,6 +7,10 @@
 import type { Page } from "@playwright/test";
 import { expect, hook, maxAbsDiff, openApp, peakSpeed, sample, slide, test } from "./fixtures.ts";
 
+/** s over which a capped speed is measured: a host stall lets one cycle catch up by up to MAX_STEP_S (50 ms) of
+ * motion at once, which a 0.1 s window reads as up to 1.5x the cap; over 0.5 s it stays within 10%. */
+const CAP_WINDOW = 0.5;
+
 for (const product of ["metal", "maker"] as const) {
   test.describe(`${product} teleop`, () => {
     async function ready(page: Page): Promise<void> {
@@ -28,8 +32,8 @@ for (const product of ["metal", "maker"] as const) {
       await page.click("#start");
       await expect(page.locator("#teleop")).toHaveText("syncing");
       const syncing = await sample(page, "positions", 1500);
-      expect(peakSpeed(syncing, 0), "sync speed, rad/s (Teleop's syncVelocity is 0.3)").toBeLessThan(0.4);
-      expect(peakSpeed(syncing, 0)).toBeGreaterThan(0.15);
+      expect(peakSpeed(syncing, 0, CAP_WINDOW), "sync speed, rad/s (Teleop's syncVelocity is 0.3)").toBeLessThan(0.4);
+      expect(peakSpeed(syncing, 0, CAP_WINDOW)).toBeGreaterThan(0.15);
       await expect(page.locator("#teleop")).toHaveText("following", { timeout: 15_000 });
       await expect(page.locator("#gap")).toHaveText(""); // reported once stopped
       await expect.poll(() => following(page)).toBeLessThan(0.02);
@@ -50,7 +54,7 @@ for (const product of ["metal", "maker"] as const) {
       await expect(page.locator("#teleop")).toHaveText("following");
       await slide(page, "#star-servo-0", 60); // a 1 rad jump of the leader
       const moving = await sample(page, "positions", 1500);
-      const peak = peakSpeed(moving, 0);
+      const peak = peakSpeed(moving, 0, CAP_WINDOW);
       expect(peak, "follower speed under a 0.5 rad/s cap").toBeLessThan(0.6);
       expect(peak).toBeGreaterThan(0.3);
       await expect.poll(() => following(page), { timeout: 10_000 }).toBeLessThan(0.02);
