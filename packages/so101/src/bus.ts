@@ -343,9 +343,16 @@ export class FeetechBus {
     const started = this.clock.now();
     let buffer = new Uint8Array(0);
     let packets: StatusPacket[] = [];
-    while (this.clock.now() - started < timeoutMs) {
-      const chunk = await this.port.read(Math.min(READ_SLICE_MS, Math.max(1, timeoutMs - (this.clock.now() - started))));
-      if (!chunk.length) continue;
+    for (;;) {
+      const elapsed = this.clock.now() - started;
+      // Past the window, replies still coming in are taken until a read comes back empty (up to a second window):
+      // a host that wakes late (a busy page) must not drop replies that arrived in time but were not read yet.
+      if (elapsed >= 2 * timeoutMs) break;
+      const chunk = await this.port.read(Math.min(READ_SLICE_MS, Math.max(1, timeoutMs - elapsed)));
+      if (!chunk.length) {
+        if (this.clock.now() - started >= timeoutMs) break;
+        continue;
+      }
       const next = new Uint8Array(buffer.length + chunk.length);
       next.set(buffer);
       next.set(chunk, buffer.length);

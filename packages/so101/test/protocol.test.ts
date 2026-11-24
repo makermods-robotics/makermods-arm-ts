@@ -96,6 +96,28 @@ describe("FeetechBus on the simulated servos", () => {
     expect(bus.timeouts).toBe(2);
   });
 
+  it("keeps replies that arrived in time but were read only after the window (a host that woke late)", async () => {
+    let now = 0;
+    const clock = { now: () => now, sleep: async () => {} };
+    const status = (id: number, params: number[]) => Uint8Array.from([0xff, 0xff, id, params.length + 2, 0, ...params, checksum(id, params.length + 2, 0, params)]);
+    const queue: Uint8Array[] = [];
+    let reads = 0;
+    const port = {
+      write: async () => void queue.push(status(1, [0x00, 0x08]), status(2, [0x10, 0x08])),
+      clear: () => {},
+      // The first read returns 40 ms late, past the 30 ms window; each reply then comes in on its own read.
+      read: async () => ((now += reads++ ? 1 : 40), queue.shift() ?? new Uint8Array(0)),
+    };
+    const bus = new FeetechBus(port, clock);
+    expect([...(await bus.syncRead([1, 2], "Present_Position")).entries()]).toEqual([[1, 2048], [2, 2064]]);
+    expect(bus.timeouts).toBe(0);
+    // Nothing more arriving still ends the exchange at the first empty read past the window.
+    reads = 0;
+    port.write = async () => void queue.push(status(1, [0x00, 0x08]));
+    expect([...(await bus.syncRead([1, 2], "Present_Position")).keys()]).toEqual([1]);
+    expect(bus.timeouts).toBe(1);
+  });
+
   it("raw packets go out byte for byte", async () => {
     const clock = new VirtualClock();
     const sim = new SimFeetechBus(clock, [1]);
