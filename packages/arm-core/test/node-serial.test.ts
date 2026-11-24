@@ -152,14 +152,19 @@ describe("node serial", () => {
     state.ports = [];
     await expect(openSlcanAdapter()).rejects.toThrow(ConnectError);
     await expect(openSlcanAdapter()).rejects.toThrow(/no USB CAN adapter found/);
-    state.ports = [{ path: "/dev/ttyACM0" }, { path: "/dev/ttyACM1" }];
-    await expect(openSlcanAdapter()).rejects.toThrow("several serial devices found (/dev/ttyACM0, /dev/ttyACM1); pass the port path");
-    state.ports = [{ path: "/dev/ttyACM1", vendorId: "ad50", productId: "60c4" }, { path: "/dev/ttyS0" }];
+    // Candidates are picked by this platform's port names (every port on Windows).
+    const [a, b, other] = ({
+      darwin: ["/dev/cu.usbmodem1", "/dev/cu.usbmodem2", "/dev/cu.Bluetooth-Incoming-Port"],
+      win32: ["COM3", "COM4", null],
+    } as Record<string, (string | null)[]>)[process.platform] ?? ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyS0"];
+    state.ports = [{ path: a! }, { path: b! }];
+    await expect(openSlcanAdapter()).rejects.toThrow(`several serial devices found (${a}, ${b}); pass the port path`);
+    state.ports = [{ path: b!, vendorId: "ad50", productId: "60c4" }, ...(other ? [{ path: other }] : [])];
     state.instances = [];
     const clock = new VirtualClock();
     const backend = await openSlcanAdapter(null, { clock, startupDelay: 0 });
     expect(backend).toBeInstanceOf(SlcanSerialBackend);
-    expect(backend.port).toBe("/dev/ttyACM1");
+    expect(backend.port).toBe(b);
     const got: number[] = [];
     backend.setRecvCallback((id) => got.push(id));
     await backend.open();
