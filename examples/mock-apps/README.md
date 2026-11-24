@@ -38,4 +38,4 @@ Without `?mock` the apps talk to real adapters.
 The playground's policy side is not in the page: `e2e/dream-server.ts` runs the Dream client's proxy
 (`createDreamProxy` + `nodeHandler`, holding a throwaway key) in front of a stand-in gateway that answers chunks
 recorded from the Python client (`../dreamlabs-ts/test/fixtures/wire.json`). Its tests are skipped without that
-checkout.
+checkout, and `npm run typecheck` checks the playground, its test and that server (`tsconfig.dream.json`) only with it.
