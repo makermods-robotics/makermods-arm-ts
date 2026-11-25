@@ -1,7 +1,7 @@
 // Port of the Python SDK's tests/unit/test_attach.py: Arm.attach(), taking over an arm left holding with
 // torque on, on simulated motors.
 import { describe, expect, it } from "vitest";
-import { Arm, type ArmConfig, ArmState, type CanBackend, ConnectError, gravity, radians, StateError } from "@makermods/arm-core";
+import { Arm, type ArmConfig, ArmState, type CanBackend, ConnectError, gravity, kinematics, radians, StateError } from "@makermods/arm-core";
 import { type SimulatedMotors, VirtualClock } from "@makermods/arm-core/testing";
 import { type ArmFakes, type FakeMotorLike, type FakeMotorOptions, RecordingLogger, waitFor } from "./fakes.js";
 
@@ -34,8 +34,8 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
    * [sim, backend]: a previous session enabled the arm, moved it home and detached, then the
    * gripper's watchdog released it.
    */
-  async function leftEnergized(clock: VirtualClock): Promise<[Sim, CanBackend]> {
-    const [first, sim] = simArm(clock);
+  async function leftEnergized(clock: VirtualClock, config?: ArmConfig): Promise<[Sim, CanBackend]> {
+    const [first, sim] = simArm(clock, config ? { config } : {});
     await first.connect();
     await first.enable();
     expect(await first.moveTo(homePose(first.config), { speed: 20.0, timeout: 10.0 })).toBe(true);
@@ -74,38 +74,59 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
   }
 
   describe("attach gravity at takeover (TypeScript only)", () => {
-    /**
-     * Attach to the arm a previous session left holding, its chain motors reporting `carried` times
-     * the model's holding torque; the first frame's torque to shoulder_lift and the full model value.
-     */
-    async function firstLiftTorque(mode: "full" | "ramp" | undefined, carried: number, prepare?: (sim: Sim, arm: Arm) => void):
-        Promise<{ tau: number; full: number; arm: Arm }> {
+    interface Takeover {
+      mode?: "ramp" | "measured";
+      /** The chain motors report the capped command at this gravity level: clip(model * carried, ±cap). */
+      carried: number;
+      prepare?: (sim: Sim, arm: Arm, clock: VirtualClock) => void | Promise<void>;
+      config?: ArmConfig;
+    }
+
+    /** Attach to the arm a previous session left holding; the first frame's torque to shoulder_lift and the full model value. */
+    async function firstLiftTorque({ mode, carried, prepare, config }: Takeover):
+        Promise<{ tau: number; full: number; reported: number; arm: Arm }> {
       const clock = new VirtualClock();
-      const [sim, backend] = await leftEnergized(clock);
-      let arm = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
-      arm.PARAM_TIMEOUT = 0.005;
+      const [sim, backend] = await leftEnergized(clock, config);
+      const make = () => {
+        const a = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
+        a.PARAM_TIMEOUT = 0.005;
+        return a;
+      };
+      let arm = make();
       if (sim.motor("gripper").faulted) {
         await expect(arm.connect()).rejects.toThrow(ConnectError);
-        arm = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
-        arm.PARAM_TIMEOUT = 0.005;
+        arm = make();
       }
       const model = gravity.fromConfig(sim.config, arm.chain)!;
       const q = sim.positions.slice(0, model.n);
-      const holding = model.model(q).map((t, i) => Math.max(-model.limitsNm[i]!, Math.min(model.limitsNm[i]!, t)));
+      const capped = (level: number): number[] =>
+        model.model(q).map((t, i) => Math.max(-model.limitsNm[i]!, Math.min(model.limitsNm[i]!, t * level)));
+      const holding = capped(1.0), reports = capped(carried);
       const motors = [...sim.motors.values()] as unknown as Array<{ torque: number }>;
-      holding.forEach((t, i) => (motors[i]!.torque = carried * t * sim.config.joints[i]!.direction));
+      reports.forEach((t, i) => (motors[i]!.torque = t * sim.config.joints[i]!.direction));
       await arm.connect(false, true);
-      prepare?.(sim, arm);
+      await prepare?.(sim, arm, clock);
       const lift = sim.config.joints.findIndex((j) => j.name === "shoulder_lift");
       clearLogs(sim);
       await arm.attach();
       expect(await waitFor(() => sim.motor("shoulder_lift").frames.length >= 1, clock)).toBe(true);
       const full = holding[lift]! * sim.config.joints[lift]!.direction;
-      return { tau: sim.motor("shoulder_lift").frames[0]![2], full, arm };
+      const reported = reports[lift]! * sim.config.joints[lift]!.direction;
+      return { tau: sim.motor("shoulder_lift").frames[0]![2], full, reported, arm };
     }
 
-    it("starts near full level when the motors carry the model's holding torque (default)", async () => {
-      const { tau, full, arm } = await firstLiftTorque(undefined, 1.0);
+    it("eases gravity in from zero by default, as the Python SDK does", async () => {
+      const { tau, full, arm } = await firstLiftTorque({ carried: 1.0 });
+      try {
+        expect(Math.abs(full)).toBeGreaterThan(0.5);
+        expect(Math.abs(tau)).toBeLessThan(0.1);
+      } finally {
+        await arm.disable();
+      }
+    });
+
+    it("measured: starts near full level when the motors carry the model's holding torque", async () => {
+      const { tau, full, arm } = await firstLiftTorque({ mode: "measured", carried: 1.0 });
       try {
         expect(Math.abs(full)).toBeGreaterThan(0.5); // a loaded joint
         expect(Math.abs(tau - full)).toBeLessThan(0.05 * Math.abs(full) + 0.05);
@@ -114,8 +135,8 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       }
     });
 
-    it("starts in between when the motors carry part of it", async () => {
-      const { tau, full, arm } = await firstLiftTorque(undefined, 0.5);
+    it("measured: starts in between when the motors carry part of it", async () => {
+      const { tau, full, arm } = await firstLiftTorque({ mode: "measured", carried: 0.5 });
       try {
         expect(Math.abs(tau - 0.5 * full)).toBeLessThan(0.1 * Math.abs(full));
       } finally {
@@ -124,8 +145,8 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
 
     for (const [what, carried] of [["an energized arm lying on its support with no torque", 0.0], ["a wrong-sign torque", -1.0]] as const) {
-      it(`starts from zero for ${what}`, async () => {
-        const { tau, full, arm } = await firstLiftTorque(undefined, carried);
+      it(`measured: starts from zero for ${what}`, async () => {
+        const { tau, full, arm } = await firstLiftTorque({ mode: "measured", carried });
         try {
           expect(Math.abs(full)).toBeGreaterThan(0.5);
           expect(Math.abs(tau)).toBeLessThan(0.1); // level 0 (one torque step of rounding)
@@ -135,8 +156,19 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       });
     }
 
-    it("eases gravity in from zero with attachGravity: ramp, as the Python SDK does", async () => {
-      const { tau, full, arm } = await firstLiftTorque("ramp", 1.0);
+    it("measured: a torque sample older than feedbackTimeout keeps the ease-in from zero", async () => {
+      const { tau, full, arm } = await firstLiftTorque({
+        mode: "measured", carried: 1.0,
+        prepare: (_sim, a, clock) => {
+          // a slow gripper enable: by the first holding frame the chain's last reading is older than feedbackTimeout
+          const g = a.config.joints.findIndex((j) => j.name === "gripper");
+          const enable = a.motors[g]!.enableConfirmed.bind(a.motors[g]!);
+          a.motors[g]!.enableConfirmed = async (timeout?: number) => {
+            await clock.sleep(a.config.feedbackTimeout + 0.2);
+            return enable(timeout);
+          };
+        },
+      });
       try {
         expect(Math.abs(full)).toBeGreaterThan(0.5);
         expect(Math.abs(tau)).toBeLessThan(0.1);
@@ -145,18 +177,42 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       }
     });
 
-    it("starts from zero when a chain joint reports torque off or no torque state", async () => {
+    it("measured: the level fits the capped command the sender computes", async () => {
+      const base = fk.defaultConfig();
+      const lift = base.joints.findIndex((j) => j.name === "shoulder_lift");
+      const model0 = gravity.fromConfig(base, kinematics.chainFromConfig(base)!)!;
+      const t = Math.abs(model0.model(homePose(base).slice(0, model0.n))[lift]!);
+      // The shoulder carries the load (the other chain joints are capped near zero) and its model
+      // torque is twice its cap. The previous owner held it at gravity level 0.3, under the cap: a
+      // fit against the capped model would put the first command at the cap instead.
+      const config = base.replace({
+        joints: base.joints.map((j, i) => (i === lift ? j.replace({ gravityLimitNm: 0.5 * t })
+          : j.gravityLimitNm !== null ? j.replace({ gravityLimitNm: 0.01 }) : j)),
+      });
+      const { tau, reported, full, arm } = await firstLiftTorque({ mode: "measured", carried: 0.3, config });
+      try {
+        expect(Math.abs(reported)).toBeLessThan(0.8 * Math.abs(full)); // held under the cap
+        expect(Math.abs(tau - reported)).toBeLessThan(0.05 * t + 0.02);
+      } finally {
+        await arm.disable();
+      }
+    });
+
+    it("measured: starts from zero when a chain joint reports torque off or no torque state", async () => {
       for (const state of ["off", "unknown"] as const) {
         let applies = true;
-        const { tau, full, arm } = await firstLiftTorque(undefined, 1.0, (sim, a) => {
-          const i = sim.config.joints.findIndex((j) => j.name === "elbow_flex");
-          if (state === "off") {
-            sim.motor("elbow_flex").enabled = false; // lying on its support, say
-          } else if ("paramsSupported" in a.motors[i]!) {
-            (a.motors[i] as unknown as { paramsSupported: boolean }).paramsSupported = false; // firmware without torque state
-          } else {
-            applies = false; // this product's motors always report torque state
-          }
+        const { tau, full, arm } = await firstLiftTorque({
+          mode: "measured", carried: 1.0,
+          prepare: (sim, a) => {
+            const i = sim.config.joints.findIndex((j) => j.name === "elbow_flex");
+            if (state === "off") {
+              sim.motor("elbow_flex").enabled = false; // lying on its support, say
+            } else if ("paramsSupported" in a.motors[i]!) {
+              (a.motors[i] as unknown as { paramsSupported: boolean }).paramsSupported = false; // firmware without torque state
+            } else {
+              applies = false; // this product's motors always report torque state
+            }
+          },
         });
         try {
           if (!applies) continue;

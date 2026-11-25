@@ -239,6 +239,19 @@ async function windDown(arm: Arm, signal: AbortSignal): Promise<string> {
 async function untilSafe(arm: Arm, then: string): Promise<string> {
   for (;;) {
     if (arm.state === ArmState.ENABLED || arm.state === ArmState.FAULT) {
+      if (!arm.loopRunning) {
+        // Nothing services the hold (the control loop stopped, e.g. after a failed bus close):
+        // retrying would only spin. Say so and release only once a person confirms it is safe.
+        console.error("the control loop is not running, so this process cannot keep the arm holding; its motors hold "
+          + "their last command until their watchdogs act. Type RELEASE and press ENTER once it is safe to release torque");
+        await releaseTyped();
+        try {
+          await arm.disable();
+        } catch (e) {
+          console.error(`disable failed: ${e instanceof Error ? e.message : e}`);
+        }
+        continue;
+      }
       try {
         then = await leaveHolding(arm);
         continue;

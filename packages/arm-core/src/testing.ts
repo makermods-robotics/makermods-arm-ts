@@ -4,6 +4,9 @@
  */
 
 import { Arm, type Logger } from "./arm.js";
+
+/** Frame-replay tests only: make an Arm send the frames the Python SDK sends where this SDK is stricter. */
+export { pythonFrameReplay } from "./arm.js";
 import type { Clock } from "./clock.js";
 import type { ArmConfig, JointConfig } from "./config.js";
 import { ValueError } from "./errors.js";
@@ -296,11 +299,11 @@ function followTheClock(arm: Arm): void {
   const tick = arm["tick"].bind(arm);
   let last: number | null = null;
   const period = 1.0 / arm.config.controlRateHz;
-  arm["tick"] = (dt: number, session: number | null = null): Promise<void> => {
+  arm["tick"] = (dt: number, session: number | null = null, poll = true): Promise<void> => {
     const now = arm.clock.now();
     const elapsed = last === null ? dt : now - last;
     last = now;
-    return tick(Math.min(Math.max(0.0, elapsed), SIM_MAX_TICK_PERIODS * period), session);
+    return tick(Math.min(Math.max(0.0, elapsed), SIM_MAX_TICK_PERIODS * period), session, poll);
   };
 }
 

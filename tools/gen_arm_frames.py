@@ -418,6 +418,8 @@ PRODUCTS = {
         "near_rest": [0.0, math.radians(-8.0), math.radians(9.0), math.radians(-1.2), 0.0, 0.0, -0.5],
         "gains": {"kp": [30.0, 80.0, 50.0, 15.0, 15.0, 15.0, 10.0], "kd": [2.0, 3.0, 2.0, 1.0, 1.0, 1.0, 0.3]},
         "variants": {"old_firmware": {"motor": {"params_supported": False}}},
+        # RobStride firmware without parameter access reports no torque state: a held arm is told by its torque.
+        "held_legacy": {"shoulder_lift": 0.4, "elbow_flex": 4.8, "wrist_flex": 1.5},
     },
     "metal": {
         "package": "metal_arm",
@@ -586,6 +588,14 @@ def build(product, gravity):
                {"op": "slow_send", "s": 0.0031, "count": 40}, {"op": "sleep", "s": 1.5},
                {"op": "stop"}, {"op": "disconnect"}]
         out.append(scenario(f"late_ticks_{tag}", ops, ov))
+        # enable() refuses an arm another program holds on firmware without torque state; nothing is sent
+        if "held_legacy" in P:
+            ops = []
+            for joint, tau in P["held_legacy"].items():
+                ops += [{"op": "sim", "joint": joint, "attr": "enabled", "value": True},
+                        {"op": "sim", "joint": joint, "attr": "torque", "value": tau}]
+            ops += [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "disconnect"}]
+            out.append(scenario(f"held_legacy_refused_{tag}", ops, ov, motor={"params_supported": False}))
     return out
 
 

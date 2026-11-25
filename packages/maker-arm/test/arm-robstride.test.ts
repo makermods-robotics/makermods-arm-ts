@@ -2,8 +2,8 @@
 // specifics (parameter-capable firmware, mode bits, RUN_MODE, the CAN-timeout watchdog and the
 // separate fault poll).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ArmConfigInit, ArmState, ConnectError, protocol, RobStrideMotor, StateError } from "@makermods/maker-arm";
-import { VirtualClock } from "@makermods/maker-arm/testing";
+import { type ArmConfigInit, ArmState, ConnectError, HeldByAnotherProgram, protocol, RobStrideMotor, StateError } from "@makermods/maker-arm";
+import { simulatedArm, VirtualClock } from "@makermods/maker-arm/testing";
 import { classify, FakeMotor, makeArm } from "./fakes.js";
 
 // Python's monotonic clock is far from zero; the tests' 0.0 "sent long ago" sentinels rely on it.
@@ -251,6 +251,28 @@ describe("RobStride arm behaviour", () => {
     };
   }
 
+  it("a write error on the old-route probe after the id write leaves both routes unverified", async () => {
+    const { arm, bus, fakes: motors } = make([new FakeMotor(1, "RS00", { position: 0.3 }), new FakeMotor(2, "RS00", { position: -0.5 }),
+      new FakeMotor(9, "RS00", { position: 0.2, online: false })]);
+    const send = bus.send.bind(bus);
+    let written = false;
+    bus.send = (canId: number, data: Uint8Array, extended = true) => {
+      const [kind] = classify(canId, data);
+      if (kind === "set_id") written = true;
+      if (written && kind === "status_query" && canId === 1) return Promise.reject(new Error("write failed"));
+      return send(canId, data, extended);
+    };
+    await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/write failed/);
+    expect(motors[1]!.motorId).toBe(9); // the motor moved
+    bus.send = send;
+    motors[9]!.online = true; // another motor now answers where the joint's motor was
+    expect(arm["unverified"].size).toBeGreaterThan(0); // enable() and attach() refuse this Arm
+    await arm.connect().catch(() => undefined);
+    await expect(arm.enable()).rejects.toThrow();
+    expect(Object.values(motors).some((m) => m.enabled)).toBe(false);
+    await arm.disconnect().catch(() => undefined);
+  });
+
   it("a set-id that leaves both ids answering keeps the joint from enabling", async () => {
     const source = new FakeMotor(1, "RS00", { position: 0.3 }), occupant = new FakeMotor(9, "RS00", { online: false });
     ambiguous(source, occupant);
@@ -283,5 +305,50 @@ describe("RobStride arm behaviour", () => {
     const fresh = new (made.arm.constructor as typeof import("@makermods/maker-arm").Arm)(made.arm.config, made.bus,
       { clock: made.clock, logger: made.logger, frameSpacing: 0 });
     expect(fresh["unverified"].size).toBe(0);
+  });
+});
+
+// ── an arm another program holds, on firmware that does not report torque state ──
+describe("held by another program (old firmware)", () => {
+  function heldByAnotherProgram(positionsDeg: number[], torquesNm: Record<string, number>) {
+    const clock = new VirtualClock();
+    const [arm, sim] = simulatedArm({ positions: positionsDeg.map((v) => v * (Math.PI / 180)), clock });
+    arm.PARAM_TIMEOUT = 0.005;
+    for (const motor of sim.motors.values()) motor.paramsSupported = false; // no parameter access, no mode bits, no torque state
+    for (const [name, tau] of Object.entries(torquesNm)) {
+      const motor = sim.motor(name);
+      motor.enabled = true; // energized by the other program; old firmware reports no mode bits
+      motor.torque = tau;
+    }
+    return { arm, sim };
+  }
+
+  it("enable() refuses a legacy arm that is producing holding torque and sends it nothing", async () => {
+    const { arm, sim } = heldByAnotherProgram([0, -15, 22, 0, 0, 0, -3], { shoulder_lift: 0.4, elbow_flex: 4.8, wrist_flex: 1.5 });
+    await arm.connect();
+    expect(arm.motors.every((m) => m.feedback!.enabled === null)).toBe(true); // torque state not reported
+    for (const m of sim.motors.values()) {
+      m.frames.length = 0;
+      m.log.length = 0;
+    }
+    const p = arm.enable();
+    await expect(p).rejects.toThrow(HeldByAnotherProgram);
+    await expect(p).rejects.toThrow(/producing torque.*rest/);
+    expect(arm.state).toBe(ArmState.CONNECTED);
+    expect([...sim.motors.values()].every((m) => !m.frames.length && !m.log.includes("enable"))).toBe(true); // no preload, no enable
+    await arm.disconnect();
+  });
+
+  it("a legacy arm resting de-energized enables as before", async () => {
+    const { arm, sim } = heldByAnotherProgram([0, -4.2, 10.3, -1, 0, 0, -3], {});
+    for (const m of sim.motors.values()) {
+      m.enabled = false;
+      m.torque = -0.0034; // the reading of a de-energized motor
+    }
+    await arm.connect();
+    await arm.enable();
+    expect(arm.state).toBe(ArmState.ENABLED);
+    await arm.disable();
+    await arm.disconnect();
   });
 });

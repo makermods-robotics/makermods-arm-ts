@@ -9,6 +9,12 @@ export class ArmError extends Error {
 
 export class ConnectError extends ArmError {}
 
+/**
+ * enable() refused: the motors are energized, held by another program (take the arm over with
+ * attach(), or bring it down with returnToRest() and disable() from that program or the CLI's `rest`).
+ */
+export class HeldByAnotherProgram extends ConnectError {}
+
 export class ParamTimeout extends ArmError {}
 
 export class StateError extends ArmError {}

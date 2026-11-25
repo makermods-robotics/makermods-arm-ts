@@ -161,6 +161,25 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       }
     });
 
+    for (const stop of ["timeout", "abort"] as const) {
+      it(`a planner that never settles does not keep moveEe pending (${stop})`, async () => {
+        const { arm, clock } = await enabled();
+        try {
+          arm["planFn"] = () => new Promise<never>(() => {});
+          const cancel = new AbortController();
+          if (stop === "abort") clock.timer(0.2, () => cancel.abort());
+          const t0 = clock.now();
+          const before = arm.getCommandedPositions();
+          expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.02]), { timeout: stop === "timeout" ? 0.3 : undefined, signal: cancel.signal }))
+            .toBe(false);
+          expect(clock.now() - t0).toBeLessThan(0.5);
+          expect(close(arm.getCommandedPositions().slice(0, 6), before.slice(0, 6), 1e-9)).toBe(true);
+        } finally {
+          await teardown(arm);
+        }
+      });
+    }
+
     it("a hold during planning drops the motion; no row is committed", async () => {
       const { arm, clock } = await enabled();
       try {
@@ -216,7 +235,7 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
   });
 
-  describe("motion ownership (stricter than Python def3243 where noted)", () => {
+  describe("motion ownership (stricter than Python 28621d6 where noted)", () => {
     it("a motion superseded after its plan but before its first row commits no row", async () => {
       const { arm, clock } = await enabled();
       try {
@@ -288,7 +307,7 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         // The next send to shoulder_pan is slow; meanwhile a hold is installed.
         const bus = arm.backend as unknown as { send: (id: number, d: Uint8Array, e?: boolean) => Promise<void> };
         const send = bus.send.bind(bus);
-        let armed = true, held: number[] | null = null;
+        let armed = true, held: number[] | null = null, mark = 0;
         bus.send = async (id: number, d: Uint8Array, e?: boolean) => {
           if (armed && id === arm.motors[0]!.motorId && d.length === 8 && !d.slice(0, 6).every((b) => b === 0xff)) {
             armed = false;
@@ -296,6 +315,7 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
             await clock.sleep(0.003);
             arm.holdCurrentPosition();
             held = arm.getCommandedPositions();
+            mark = sim.motor("shoulder_lift").frames.length;
             return;
           }
           return send(id, d, e);
@@ -303,8 +323,9 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         await clock.sleep(0.05);
         expect(held).not.toBeNull();
         const frames = sim.motor("shoulder_lift").frames;
-        // every shoulder_lift frame after the hold carries the held position
-        const after = frames.slice(-3);
+        // every shoulder_lift frame sent after the hold carries the held position
+        const after = frames.slice(mark);
+        expect(after.length).toBeGreaterThan(0);
         expect(after.every(([p]) => Math.abs(p - held![lift]! * arm.config.joints[lift]!.direction) < 1e-3)).toBe(true);
       } finally {
         await teardown(arm);
@@ -504,7 +525,7 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
   });
 
-  describe("stop() rechecks (stricter than Python def3243)", () => {
+  describe("stop() rechecks (stricter than Python 28621d6)", () => {
     it("enabled outside a soft limit near the support, the rest target is not clamped past the press bound", async () => {
       const base = fk.defaultConfig();
       const config = base.replace({ restWindow: radians(12.0) });
@@ -531,14 +552,14 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       const { arm, sim } = await enabled({ config, positions });
       const tick = arm["tick"].bind(arm);
       let moved = false;
-      arm["tick"] = (dt: number, session: number | null = null) => {
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"] && !moved) {
           moved = true;
           const m = sim.motor("shoulder_lift");
           m.track = false;
           m.position -= 0.4; // raised during the final recheck
         }
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop()).toBe(false);
@@ -572,8 +593,8 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     it("warns once per session when the loop runs below 90 % of the rate", async () => {
       const { arm, clock, logger } = fk.makeArm(null, {}, new VirtualClock({ start: 1000 }));
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
-        await tick(dt, session);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        await tick(dt, session, poll);
         await clock.sleep(0.009); // each tick takes 9 ms of a 5 ms period
       };
       await arm.connect();
@@ -593,8 +614,8 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       const { arm, clock, logger } = fk.makeArm(null, {}, new VirtualClock({ start: 1000 }));
       let slow = true;
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
-        await tick(dt, session);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        await tick(dt, session, poll);
         if (slow) await clock.sleep(0.009);
       };
       await arm.connect();
@@ -620,14 +641,14 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.enable();
       const tick = arm["tick"].bind(arm);
       let moved = false;
-      arm["tick"] = async (dt: number, session: number | null = null) => {
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"] && !moved) {
           moved = true;
           await clock.sleep(0.4); // a slow recheck
           fakes[1]!.track = false;
           fakes[1]!.position += 0.1; // and the joint moved: stop() holds and restarts the loop
         }
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         await clock.sleep(0.7);
@@ -653,9 +674,9 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       const dts: number[] = [];
       let stall = 0;
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
         if (session !== null) dts.push(dt);
-        await tick(dt, session);
+        await tick(dt, session, poll);
         if (stall > 0) {
           const s = stall;
           stall = 0;

@@ -1,6 +1,6 @@
 // Port of the Python SDK's tests/unit/test_arm.py.
 import { describe, expect, it } from "vitest";
-import { type ArmConfigInit, ArmState, ConnectError, StateError, ValueError } from "@makermods/arm-core";
+import { type ArmConfigInit, ArmState, ConnectError, HeldByAnotherProgram, StateError, ValueError } from "@makermods/arm-core";
 import { VirtualClock } from "@makermods/arm-core/testing";
 import { type ArmFakes, commands, type FakeMotorLike, type FakeMotorOptions, type Made, waitFor } from "./fakes.js";
 
@@ -129,6 +129,7 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.connect();
       const marks = Object.fromEntries(Object.entries(fakes).map(([k, f]) => [k, f.log.length]));
       const p = arm.enable({ startLoop: false });
+      await expect(p).rejects.toThrow(HeldByAnotherProgram);
       await expect(p).rejects.toThrow(ConnectError);
       await expect(p).rejects.toThrow(/motors 1 \(j1\) already have torque on.*release/);
       expect(fakes[1]!.enabled).toBe(true);
@@ -328,12 +329,12 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.enable();
       let stalled = false;
       const tick = arm["tick"].bind(arm), wait = arm["waitTicks"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
         if (stalled) {
           await clock.sleep(0.01); // the loop runs late and sends nothing
           return;
         }
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       arm["waitTicks"] = async (n: number, timeout = 1.0) => {
         const ok = await wait(n, timeout);
@@ -469,9 +470,9 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         return handle(canId, data);
       };
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = (dt: number, session: number | null = null) => {
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"]) dropping = true;
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop()).toBe(false);
@@ -503,14 +504,14 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         return out;
       };
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"]) {
           fakes[1]!.track = false;
           fakes[1]!.position += 0.45; // moved after the loop's last frame
         } else if (arm["returning"]) {
           buffering = true; // from the return's ticks on, each reply comes one frame late
         }
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop()).toBe(false);
@@ -531,8 +532,8 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       let latched: string | null = null;
       Object.defineProperty(arm.motors[0]!, "faultLatched", { get: () => latched, configurable: true });
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
-        await tick(dt, session);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        await tick(dt, session, poll);
         if (!arm["running"]) latched = "a reply latched a fault"; // after this tick's health check
       };
       try {
@@ -550,8 +551,8 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.connect();
       await arm.enable();
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = async (dt: number, session: number | null = null) => {
-        await tick(dt, session);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        await tick(dt, session, poll);
         if (!arm["running"]) await clock.sleep(0.03); // the recheck reading is 30 ms old when judged
       };
       try {
@@ -569,9 +570,9 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.enable();
       let stopping: Promise<void> | null = null;
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = (dt: number, session: number | null = null) => {
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"] && stopping === null) stopping = arm.estop();
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop()).toBe(false);
@@ -585,6 +586,379 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       } finally {
         await arm.disconnect();
       }
+    });
+
+    // ── second review: the release recheck, admission, aborts, superseded frames, shutdown ownership ──
+    /** Reply frames of `fake` withheld one frame (an adapter buffer) once `on()` holds. */
+    function oneBehind(fake: M, on: () => boolean): void {
+      let held: Array<[number, Uint8Array]> = [];
+      const handle = fake.handle.bind(fake);
+      fake.handle = (canId: number, data: Uint8Array) => {
+        const replies = handle(canId, data);
+        if (!on()) return replies;
+        const out = held;
+        held = replies;
+        return out;
+      };
+    }
+
+    it("recheck: a surplus reply earlier in the session does not hide a buffered reply later", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      // one surplus reply (a duplicate) early in the session
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      let duplicate = true;
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = handle(canId, data);
+        if (duplicate && replies.length) {
+          duplicate = false;
+          return [...replies, ...replies];
+        }
+        return replies;
+      };
+      await arm["tick"](0.005);
+      let buffering = false;
+      oneBehind(fakes[1]!, () => buffering);
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        if (!arm["running"]) {
+          fakes[1]!.track = false;
+          if (fakes[1]!.position < 0.6) fakes[1]!.position += 0.45; // the shoulder moved after the loop's last frame
+        } else if (arm["returning"]) {
+          buffering = true;
+        }
+        return tick(dt, session, poll);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        buffering = false;
+        arm["tick"] = tick;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("recheck: movement between the two reads keeps the arm holding", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let reads = 0;
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null, poll = true) => {
+        if (!arm["running"] && ++reads === 2) {
+          fakes[1]!.track = false;
+          fakes[1]!.position += 0.45;
+        }
+        return tick(dt, session, poll);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(reads).toBe(2);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        arm["tick"] = tick;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("recheck: a stale reply delivered just after the read, with the read's own reply lost, keeps the arm holding", async () => {
+      const { arm, fakes, bus, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let last: Array<[number, Uint8Array]> = [];
+      let reads = 0;
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = handle(canId, data);
+        if (arm["running"]) {
+          if (replies.length) last = replies; // a reply from before the loop stopped
+          return replies;
+        }
+        if (classify(canId, data)[0] === "command" && ++reads === 1) {
+          const stale = last;
+          fakes[1]!.track = false;
+          fakes[1]!.position += 0.45; // the joint moved
+          clock.timer(0.003, () => stale.forEach(([id, d]) => bus.inject(id, d))); // the old reply comes out late
+        }
+        return classify(canId, data)[0] === "command" ? [] : replies; // the reads' own replies are lost
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("stop() keeps resolving false while a release is unconfirmed; enable() and setMotorId() refuse", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let dropping = false;
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) =>
+        (dropping && classify(canId, data)[0] === "disable" ? [] : handle(canId, data));
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
+        if (!arm["running"]) dropping = true;
+        return tick(dt, session, poll);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(arm.unconfirmedDisable).toEqual([1]);
+        expect(await arm.stop()).toBe(false); // a second stop() does not report it released
+        await expect(arm.enable()).rejects.toThrow(/not confirmed/);
+        await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/not confirmed/);
+        dropping = false;
+        await arm.disable();
+        expect(arm.unconfirmedDisable).toEqual([]);
+        expect(await arm.stop()).toBe(true);
+      } finally {
+        dropping = false;
+        await arm.disconnect();
+      }
+    });
+
+    it("disable() then enable() issued during an e-stop never energize", async () => {
+      const { arm, fakes, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const stopping = arm.estop();
+      await clock.sleep(0.002); // the e-stop is confirming its release
+      const disabling = arm.disable();
+      const enabling = arm.enable().then(() => null, (e: unknown) => e);
+      await Promise.all([stopping, disabling]);
+      expect(await enabling).toBeInstanceOf(StateError);
+      expect(fakes[1]!.enabled).toBe(false);
+      expect(arm.state).toBe(ArmState.CONNECTED);
+      await arm.disconnect();
+    });
+
+    it("an abort during a paced recheck with a missing reply ends stop() at once", async () => {
+      const { arm, fakes, bus, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const interrupt = new AbortController();
+      let aborted = 0;
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        if (!arm["running"] && arm.state === ArmState.ENABLED && classify(canId, data)[0] === "command") {
+          if (!aborted) clock.timer(0.002, () => {
+            aborted = clock.now();
+            interrupt.abort();
+          });
+          return []; // the recheck's reply is missing
+        }
+        return handle(canId, data);
+      };
+      bus.feedbackPacedControl = true;
+      bus.feedbackWaitTimeout = 0.3; // a slow adapter's reply wait
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(aborted).toBeGreaterThan(0);
+        expect(clock.now() - aborted).toBeLessThan(0.02);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        bus.feedbackPacedControl = false;
+        bus.feedbackWaitTimeout = 0.015;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("an abort when the first torque-off write failed before it was sent keeps the arm holding", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const interrupt = new AbortController();
+      const motor = arm.motors[0]!;
+      const send = motor.sendCommand.bind(motor);
+      let failed = false;
+      motor.sendCommand = (pos: number, vel: number, kp: number, kd: number, tau: number) => {
+        if (!failed && !arm["running"] && kp === 0 && kd === 0) {
+          failed = true;
+          interrupt.abort();
+          return Promise.reject(new Error("write refused")); // definitely not sent
+        }
+        return send(pos, vel, kp, kd, tau);
+      };
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(failed).toBe(true);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(fakes[1]!.log.filter((e) => e === "disable").length).toBe(0);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("after a failed stop() restored the gains, no frame of a tick in flight carries the float-mode command", async () => {
+      const { arm, fakes, bus, clock } = make(null, fastRest({ restRateHz: 1 }));
+      await arm.connect();
+      await arm.enable();
+      arm["synced"] = [true, true];
+      expect(await arm.moveTo([1.0, -0.5], { timeout: 3.0 })).toBe(true);
+      arm.floatMode(0.2, () => [1.08, 0.0]);
+      await clock.sleep(0.05);
+      const interrupt = new AbortController();
+      const send = bus.send.bind(bus);
+      bus.send = async (canId: number, data: Uint8Array, extended = true) => {
+        // During the return, a loop tick's first frame is slow; the stop() fails meanwhile.
+        if (arm["returning"] && arm["running"] && !interrupt.signal.aborted && classify(canId, data)[0] === "command" && canId === 1) {
+          await send(canId, data, extended);
+          interrupt.abort();
+          await clock.sleep(0.002);
+          return;
+        }
+        return send(canId, data, extended);
+      };
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        const marks = [fakes[1]!.frames.length, fakes[2]!.frames.length];
+        await clock.sleep(0.1);
+        const profile = twoJointConfig().joints;
+        for (const [k, id] of [[0, 1], [1, 2]] as const) {
+          const after = fakes[id]!.frames.slice(marks[k]);
+          expect(after.length).toBeGreaterThan(0);
+          expect(after.every(([, kp, tau]) => Math.abs(kp - profile[k]!.kp) <= 0.2 && Math.abs(tau) < 0.05), `motor ${id}`).toBe(true);
+        }
+      } finally {
+        bus.send = send;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("a hold drops the regulated gripper frame a tick computed before it", async () => {
+      const joints = twoJointConfig().joints.map((j, i) => (i === 1 ? j.replace({ holdTorqueNm: 0.5 }) : j));
+      const { arm, fakes, bus, clock } = make(null, { joints });
+      await arm.connect();
+      await arm.enable({ startLoop: false });
+      const send = bus.send.bind(bus);
+      let slow = true;
+      bus.send = async (canId: number, data: Uint8Array, extended = true) => {
+        if (slow && classify(canId, data)[0] === "command" && canId === 1) {
+          slow = false;
+          await send(canId, data, extended);
+          await clock.sleep(0.002);
+          arm.holdCurrentPosition(); // installed while the gripper's frame is still unsent
+          return;
+        }
+        return send(canId, data, extended);
+      };
+      const before = fakes[2]!.frames.length;
+      await arm["tick"](0.005);
+      expect(fakes[2]!.frames.length).toBe(before); // dropped, not sent stale
+      await arm["tick"](0.005);
+      expect(fakes[2]!.frames.length).toBe(before + 1); // the next tick computes it afresh
+      bus.send = send;
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("user gains survive returnToRest(), a successful stop() and a new enable", async () => {
+      const { arm } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      arm.setGains([30.0, 10.0], [1.5, 0.4]);
+      expect(await arm.returnToRest(arm.restPose)).toBe(true);
+      expect(arm.config.joints.map((j) => j.kp)).toEqual([30.0, 10.0]);
+      expect(await arm.stop()).toBe(true);
+      expect(arm.config.joints.map((j) => j.kp)).toEqual([30.0, 10.0]);
+      await arm.enable();
+      expect(arm.config.joints.map((j) => j.kp)).toEqual([30.0, 10.0]);
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("the Python-frame replay switch is not on the public object", () => {
+      const { arm } = make();
+      expect("pythonFrames" in arm).toBe(false);
+      expect(Object.keys(arm).some((k) => /python|compat|replay/i.test(k))).toBe(false);
+    });
+
+    it("detach() racing estop() reports a motor whose release was not confirmed", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => (classify(canId, data)[0] === "disable" ? [] : handle(canId, data));
+      const detaching = arm.detach().then(() => null, (e: unknown) => e);
+      await arm.estop();
+      await detaching;
+      expect(fakes[1]!.enabled).toBe(true); // its disables were lost
+      expect(arm.unconfirmedDisable).toContain(1);
+    });
+
+    it("holdOnFault off: a lost fault-path disable is reported", async () => {
+      const { arm, fakes } = make(null, { holdOnFault: false });
+      await arm.connect();
+      await arm.enable({ startLoop: false });
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => (classify(canId, data)[0] === "disable" ? [] : handle(canId, data));
+      fakes[1]!.faulted = true;
+      arm["pollSent"] = new Map([[1, 0.0], [2, 1e9]]);
+      await arm["tick"](0.005);
+      await arm["tick"](0.005);
+      expect(arm.state).toBe(ArmState.FAULT);
+      expect(arm.unconfirmedDisable).toContain(1);
+      await arm.disconnect();
+    });
+
+    it("a failed bus close during detach() leaves the arm serviced", async () => {
+      const { arm, bus, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const close = bus.close.bind(bus);
+      bus.close = () => Promise.reject(new Error("the adapter went away"));
+      await expect(arm.detach()).rejects.toThrow(/went away/);
+      expect(arm.state).toBe(ArmState.ENABLED);
+      expect(arm.loopRunning).toBe(true);
+      const ticks = arm["tickCount"];
+      await clock.sleep(0.1);
+      expect(arm["tickCount"] - ticks).toBeGreaterThan(10);
+      bus.close = close;
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("a recheck write that never settles does not leave stop() pending", async () => {
+      const { arm, bus } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const send = bus.send.bind(bus);
+      bus.send = (canId: number, data: Uint8Array, extended = true) =>
+        (!arm["running"] && arm.state === ArmState.ENABLED && classify(canId, data)[0] === "command" && canId === 1
+          ? new Promise<void>(() => {}) // never settles
+          : send(canId, data, extended));
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect([ArmState.ENABLED, ArmState.FAULT]).toContain(arm.state);
+        expect(arm.loopRunning).toBe(true);
+      } finally {
+        bus.send = send;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("estop() does not wait behind a stop() that is stuck", async () => {
+      const { arm, fakes, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      arm["waitTicks"] = () => new Promise<boolean>(() => {}); // stop() never gets past its two-tick wait
+      void arm.stop();
+      await clock.sleep(0.05);
+      await arm.estop();
+      expect(arm.state).toBe(ArmState.CONNECTED);
+      expect(fakes[1]!.enabled).toBe(false);
     });
 
     it("enable() right after estop() is refused until the e-stop has finished", async () => {
@@ -628,9 +1002,9 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.enable();
       const interrupt = new AbortController();
       const tick = arm["tick"].bind(arm);
-      arm["tick"] = (dt: number, session: number | null = null) => {
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"]) interrupt.abort(); // stop()'s own reading after the loop stopped
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
@@ -651,13 +1025,13 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.enable();
       const tick = arm["tick"].bind(arm);
       let moved = false;
-      arm["tick"] = (dt: number, session: number | null = null) => {
+      arm["tick"] = (dt: number, session: number | null = null, poll = true) => {
         if (!arm["running"] && !moved && arm.state === ArmState.ENABLED) {
           moved = true;
           fakes[1]!.track = false;
           fakes[1]!.position += 0.1; // nudged while the loop was stopping
         }
-        return tick(dt, session);
+        return tick(dt, session, poll);
       };
       try {
         expect(await arm.stop()).toBe(false);

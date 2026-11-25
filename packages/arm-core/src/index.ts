@@ -2,14 +2,16 @@ export { type Clock, Mutex, RealClock, type RealClockOptions, Signal } from "./c
 export {
   ArmConfig, type ArmConfigInit, checkGains, degrees, JointConfig, type JointConfigInit, radians, type RawProfile,
 } from "./config.js";
-export { ArmError, ConnectError, FaultLatched, ParamTimeout, RouteUnverified, StateError, TimeoutError, ValueError } from "./errors.js";
+export {
+  ArmError, ConnectError, FaultLatched, HeldByAnotherProgram, ParamTimeout, RouteUnverified, StateError, TimeoutError, ValueError,
+} from "./errors.js";
 export { ArmState } from "./state.js";
 export type { Motor, MotorFeedback, MotorStatus, ParamSpec, Product } from "./motor.js";
 export { CanBackend, type RecvCallback } from "./transport/base.js";
 export { MockBackend, type Responder } from "./transport/mock.js";
 export {
   Arm, type ArmOptions, type ArmStatus, EE_ANGLE_TOL, EE_MIN_SECONDS, EE_POSITION_TOL, type EnableOptions, type ExtraTorque,
-  ATTACH_LOAD_MIN_NM, FRAME_SPACING, FRAME_SPACING_S, HEIGHT_JOINT_M_PER_RAD, type JointStatus, type Logger, LOOP_RATE_WINDOW_S, MAX_TICK_PERIODS,
+  ATTACH_LOAD_MIN_NM, FRAME_SPACING, FRAME_SPACING_S, HEIGHT_JOINT_M_PER_RAD, HELD_TORQUE_NM, type JointStatus, type Logger, LOOP_RATE_WINDOW_S, MAX_TICK_PERIODS,
   type MoveEeOptions, type MoveOptions, REST_FRESH_S, REST_PRESS, REST_PRESS_NM, REST_RECHECK, type SetMotorIdOptions, SLOW_LOOP_SHARE, type StopOptions,
 } from "./arm.js";
 export {

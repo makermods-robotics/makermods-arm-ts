@@ -275,9 +275,6 @@ export class Motor implements CoreMotor {
     await this.#send(protocol.encodeMit(this.motorId, pos, vel, kp, kd, tau, this.scaling));
   }
 
-  /** The refresh pollStatus() sends is answered with a state frame. */
-  readonly pollAnsweredByFeedback = true;
-
   /** Send the read-only refresh; its state frame updates status (as every MIT reply does). */
   async pollStatus(): Promise<void> {
     await this.#send(protocol.encodeRefresh(this.motorId));
@@ -616,7 +613,7 @@ export class Motor implements CoreMotor {
    * MST_ID through the new id. A motor that keeps answering at the old id has the change saved but
    * not applied: StateError asks for a power cycle.
    */
-  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false): Promise<void> {
+  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false, onWrite?: () => void): Promise<void> {
     const [lo, hi] = ID_RANGE;
     if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
       throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
@@ -642,6 +639,7 @@ export class Motor implements CoreMotor {
         throw new StateError(`${this.joint.label}: the motor did not report whether torque is on. Make sure it `
           + "is de-energized, then confirm (torque_off_confirmed=True; the CLI asks)");
       }
+      onWrite?.();
       const reply = await this.#register(protocol.OP_WRITE, Reg.MST_ID,
         { value: newReply, dtype: "u32", timeout: step, attempts: 2, sendId: oldId, replyIds: replies, locked: true });
       if (reply.value("u32") !== newReply) {

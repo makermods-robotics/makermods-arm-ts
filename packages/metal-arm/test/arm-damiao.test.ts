@@ -56,6 +56,28 @@ describe("arm on Damiao motors", () => {
     expect(bus.sent).toEqual([]);
   });
 
+  it("an occupant answering the old id on another master reply id is heard (stricter)", async () => {
+    const source = new FakeMotor(1, "jlo", { position: 0.3 }), occupant = new FakeMotor(5, "jlo", { position: 0.1, online: false });
+    const original = source.handle.bind(source);
+    source.handle = (canId: number, data: Uint8Array) => {
+      if (canId === protocol.PARAM_CAN_ID && data[2] === protocol.OP_SAVE) {
+        occupant.sendId = 1;
+        occupant.replyId = 0x60; // a master id the joint's own route does not listen on
+        occupant.registers[protocol.Reg.ESC_ID] = 1;
+        occupant.registers[protocol.Reg.MST_ID] = 0x60;
+        occupant.online = true;
+      }
+      return original(canId, data);
+    };
+    const { arm } = make([source, new FakeMotor(2, "jlo", { position: -0.5 }), occupant]);
+    await expect(arm.setMotorId(1, 9)).rejects.toThrow(RouteUnverified);
+    expect(arm["unverified"].size).toBeGreaterThan(0); // enable() and attach() refuse this Arm
+    await arm.connect().catch(() => undefined);
+    await expect(arm.enable()).rejects.toThrow();
+    expect(source.enabled || occupant.enabled).toBe(false);
+    await arm.disconnect().catch(() => undefined);
+  });
+
   it("both ids answering after the writes is RouteUnverified and blocks enable and attach (stricter)", async () => {
     // Another motor starts answering on the old id once the new id is saved.
     const source = new FakeMotor(1, "jlo", { position: 0.3 }), occupant = new FakeMotor(5, "jlo", { position: 0.1, online: false });

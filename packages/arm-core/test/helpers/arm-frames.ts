@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Arm, type ArmConfig, type CanBackend, type JointConfig, type Logger, type RawProfile } from "../../src/index.js";
-import { type SimulatedMotor, VirtualClock } from "../../src/testing.js";
+import { pythonFrameReplay, type SimulatedMotor, VirtualClock } from "../../src/testing.js";
 
 interface Op {
   op: string;
@@ -90,7 +90,7 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
     const made = new Arm(config, bus, { clock, logger: silent, attachGravity: "ramp" });
     // The Python generator plans in-process, which takes no fake time: plan without letting timers fire.
     made["planPause"] = () => Promise.resolve();
-    made["pythonFrames"] = true;
+    pythonFrameReplay(made);
     return made;
   };
   const motor = (op: Op | SimEvent): M => motors[labels.indexOf(String(op.joint))]!;

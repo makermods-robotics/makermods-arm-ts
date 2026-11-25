@@ -51,9 +51,10 @@ corrected criterion and passed; none is an open failure.
 
 ## Seen on the arms
 
-- `attach()` (with `attachGravity: "ramp"`, the Python behaviour; the default is now "full", not yet
-  re-measured on an arm) restarts gravity compensation from zero and eases it in over 0.5 s, so a loaded
-  joint dips for a moment at takeover (about 3.5 deg on the Metal elbow). The Python SDK does the same.
+- `attach()` (the default `attachGravity: "ramp"`, as in Python) restarts gravity compensation from
+  zero and eases it in over 0.5 s, so a loaded joint dips for a moment at takeover (about 3.5 deg on
+  the Metal elbow). The Python SDK does the same. The experimental `"measured"` option has not been
+  run on an arm.
 - Measured tool position after `moveEe` is off by the servo's standing error under gravity
   (about 1 deg on the loaded joints: 6 to 9 mm at the Metal tool). The commanded pose is within 1 mm.
 - The Metal wrist_flex joint lags its command by about 175 ms; the other joints by 65 to 100 ms.

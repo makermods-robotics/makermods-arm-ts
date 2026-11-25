@@ -77,8 +77,6 @@ export interface Motor {
   sendCommand(pos: number, vel: number, kp: number, kd: number, tau: number): Promise<void>;
   /** Non-clearing fault/status query; the reply updates `status`. */
   pollStatus(): Promise<void>;
-  /** Is pollStatus() answered with a feedback frame (one that advances `feedbackSequence`)? */
-  readonly pollAnsweredByFeedback?: boolean;
 
   // Queries: wait for the reply.
   /** Zero-gain command at `pos`; true once the motor replies. */
@@ -101,9 +99,10 @@ export interface Motor {
   /**
    * Change the motor's CAN ID (persistent). Refused unless a fresh read shows the motor
    * de-energized; where the firmware cannot report torque state, only with `torqueOffConfirmed`
-   * from a caller who made sure it is. Refused when anything answers on `newId`.
+   * from a caller who made sure it is. Refused when anything answers on `newId`. `onWrite` is called
+   * right before the first frame that may change the id persistently.
    */
-  setId(newId: number, timeout?: number, torqueOffConfirmed?: boolean): Promise<void>;
+  setId(newId: number, timeout?: number, torqueOffConfirmed?: boolean, onWrite?: () => void): Promise<void>;
   /** Arm the motor-side watchdog; the token restores the previous setting (null: nothing to restore). */
   armWatchdog(timeoutMs: number, timeout?: number): Promise<unknown>;
   restoreWatchdog(token: unknown, timeout?: number): Promise<void>;

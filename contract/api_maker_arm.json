@@ -519,6 +519,7 @@
     "EE_POSITION_TOL",
     "FRAME_SPACING_S",
     "HEIGHT_JOINT_M_PER_RAD",
+    "HELD_TORQUE_NM",
     "LOOP_RATE_WINDOW_S",
     "MAX_TICK_PERIODS",
     "REST_FRESH_S",
@@ -758,6 +759,12 @@
      "properties": []
     },
     "FaultLatched": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "HeldByAnotherProgram": {
      "constants": [],
      "fields": [],
      "methods": {},

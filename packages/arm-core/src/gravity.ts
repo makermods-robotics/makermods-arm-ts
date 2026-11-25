@@ -90,6 +90,12 @@ export class GravityFeedforward {
     this.#last = null;
   }
 
+  /** Continue the ease-in from `level` as of `now` (the next frame advances it from there). */
+  startAt(level: number, now: number): void {
+    this.level = pyMin(1.0, pyMax(0.0, level));
+    this.#last = now;
+  }
+
   /**
    * Torques for the frames about to go out, one step further into the ease-in: at the measured
    * pose when every joint replied within `staleS`, else at the goal. Non-finite values become 0.

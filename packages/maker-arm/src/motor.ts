@@ -349,7 +349,7 @@ export class RobStrideMotor implements Motor {
    * and nothing on its old id: RouteUnverified when both answer; a motor still answering on the old
    * ID took the frame without applying it (StateError: power-cycle it and scan).
    */
-  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false): Promise<void> {
+  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false, onWrite?: () => void): Promise<void> {
     const [lo, hi] = ID_RANGE;
     if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
       throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
@@ -390,6 +390,7 @@ export class RobStrideMotor implements Motor {
         throw new StateError(`${label}: the motor is moving (${velocity.toFixed(2)} rad/s); let it come to rest`);
       }
       if (await RobStrideMotor.#answers(probe, step)) throw new ArmError(`motor ID ${newId} already answers on the bus`);
+      onWrite?.();
       await this.#send(protocol.encodeSetId(oldId, newId));
       await this.#clock.sleep(ID_SETTLE_S);
       const onNew = await RobStrideMotor.#answers(probe, step);
