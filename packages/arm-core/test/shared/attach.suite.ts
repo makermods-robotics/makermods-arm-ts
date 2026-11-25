@@ -198,6 +198,29 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       }
     });
 
+    it("measured: a chain joint whose fresh reading reports torque off by the fit starts from zero", async () => {
+      const { tau, full, arm } = await firstLiftTorque({
+        mode: "measured", carried: 1.0,
+        prepare: (sim, a) => {
+          // while the gripper is being enabled, the elbow reports torque off in a fresh reading
+          const g = a.config.joints.findIndex((j) => j.name === "gripper");
+          const e = a.config.joints.findIndex((j) => j.name === "elbow_flex");
+          const enable = a.motors[g]!.enableConfirmed.bind(a.motors[g]!);
+          a.motors[g]!.enableConfirmed = async (timeout?: number) => {
+            sim.motor("elbow_flex").enabled = false;
+            await a.motors[e]!.readState(0.05);
+            return enable(timeout);
+          };
+        },
+      });
+      try {
+        expect(Math.abs(full)).toBeGreaterThan(0.5);
+        expect(Math.abs(tau)).toBeLessThan(0.2 * Math.abs(full));
+      } finally {
+        await arm.disable();
+      }
+    });
+
     it("measured: starts from zero when a chain joint reports torque off or no torque state", async () => {
       for (const state of ["off", "unknown"] as const) {
         let applies = true;

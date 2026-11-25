@@ -56,7 +56,8 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
   opt-in, not yet run on an arm: right before the first holding frame it takes the pose and the
   feedback torques (joint sign) again and starts the ease-in at the level whose capped command,
   clip(model * level, ±gravity_limit_nm) as the sender computes it, best fits them (least squares
-  over 0..1 in steps of 0.001); from zero when a chain joint reports torque off or no torque state,
+  over 0..1 in steps of 0.001); from zero when a chain joint reported torque off or no torque state
+  at the start of attach() or in its latest reading at the fit,
   when a chain joint's reading is older than feedbackTimeout, or when the model torque is under
   `ATTACH_LOAD_MIN_NM`. Both families report an estimated output torque (from motor current) in
   N·m and motor sign, 12 bits over the model's torque range (RobStride tMin..tMax, Damiao ±T_MAX: a
@@ -64,25 +65,31 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
   motor's own error. The Python SDK could get the same option once it has been run on an arm.
 - Frame spacing: Python busy-waits `FRAME_SPACING_S` start to start; TypeScript sleeps the same gap
   on its clock (a RealClock spins the last stretch of a short sleep).
+- gs_usb write deadline: Python bounds a USB write only by the native endpoint timeout. In Node the
+  TypeScript transport does the same (the `usb` package's endpoint timeout, ioTimeout), with a
+  JavaScript backstop NATIVE_BACKSTOP_S later that cannot fire before the native timeout can report,
+  so a descheduled process does not report a completed transfer as timed out. In a browser WebUSB has
+  no transfer timeout and the JavaScript deadline (ioTimeout) is the only one. The wait for a free
+  transmit slot is bounded by ioTimeout either way. One failed command write still faults its joint.
 - stop(): a weight-carrying joint left out of the return is read again with the returned joints right
   before the release; missing, stale or raised (beyond restSettle from the supported pose) refuses
   it (stricter than Python 28621d6).
 - stop(): the release recheck (stricter than Python 28621d6, which reads each motor once and
   counts the first reply after the read). MIT feedback carries no request id and a reading's age is
-  its host receipt time, so the reading is established by procedure, and any ambiguity keeps the arm
-  holding: after the control loop stops the bus must go quiet (no reply from any motor for
-  REPLY_TIMEOUT, within QUIET_BOUND_S); then two read cycles each send the holding frame (no status
-  poll) and require exactly one reply from every checked joint after that cycle's request, younger
-  than min(feedbackTimeout, REST_FRESH_S); both cycles' poses must meet the release criteria and
-  agree within REST_AGREE; no reply may arrive after the second cycle before the release; faults
-  and the arm state are judged again right before it. A missing reply, more replies than requests,
-  a stale age, a fault, a state change, an abort, or a recheck write that does not complete within
-  SEND_TIMEOUT_S refuses the release; nothing "repairs" a missing reply. Guaranteed: every reply
-  counted arrived after a quiet window in which nothing was in flight, one per request. Not
-  guaranteed: a device that keeps replies longer than the quiet window without delivering any, then
-  releases exactly one stored reply per new request, passes if it holds two or more stored replies
-  (two stale replies in a row that agree); with one stored reply the second cycle's reading answers
-  the first cycle's request, which was sent after the loop stopped.
+  its host receipt time, so the reading is established by receive order: two read cycles each send
+  every motor its holding frame (no status poll); for each checked joint a sequence snapshot is
+  taken right before ITS frame is submitted, and at least one reply from that joint must arrive
+  after it (duplicates and late replies are tolerated; the latest reading in the cycle is judged).
+  Frames from joints that are not checked never matter, and there is no global quiet window. Each
+  cycle waits at most min(feedbackTimeout, REST_FRESH_S, half the shortest armed motor watchdog), so
+  the holding frames keep coming and no watchdog trips inside a successful recheck. Both cycles'
+  poses must meet the release criteria and agree within REST_AGREE; faults and the arm state are
+  judged last. A missing reply, a stale reading, a fault, a state change, an abort, or a recheck
+  write that does not complete within SEND_TIMEOUT_S keeps the arm holding; nothing "repairs" a
+  missing reply. What it establishes: twice, each checked joint answered after its own request was
+  submitted (receive order). What it cannot: prove where an untagged reply came from; it is fooled
+  by two consecutive stale readings of the same joint (a late or duplicated earlier reply arriving
+  right after each of its requests) that agree with each other while both real replies are lost.
 - stop(): resolves true only when every motor confirmed torque off; otherwise false with the arm
   CONNECTED, the loop stopped, the motors in `unconfirmedDisable` and `status().unconfirmedDisable`,
   and disable() tries again. A later stop() keeps resolving false, and enable() and setMotorId()
@@ -100,17 +107,25 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
 - Shutdown ownership (stricter than Python 28621d6): detach() during an e-stop runs the confirmed
   release before closing the bus; an e-stop whose release could not run before the bus closed lists
   every motor in unconfirmedDisable; with holdOnFault off the fault path's disables are confirmed
-  and the unconfirmed reported; a bus close that fails during detach() restarts the control loop
-  (and rejects); writes of stop()'s recheck and of every shutdown are bounded by SEND_TIMEOUT_S (one
-  that does not settle counts as failed, or as possibly sent for the point of no return).
+  and the unconfirmed reported; a bus close that rejects during detach() gives up the motion in
+  flight, holds the measured pose and restarts the control loop (and rejects); a close the transport
+  records as failed (`closeError`, gs_usb and SLCAN) makes detach() reject saying the arm is still
+  energized and not serviced (loopRunning false); writes of stop()'s recheck and of every shutdown
+  are bounded by SEND_TIMEOUT_S, a backstop for a transport that never settles a write (one that
+  does not settle counts as failed, or as possibly sent for the point of no return).
 - stop(): the point of no return is the first torque-off frame the transport accepted or whose write
-  did not settle: an abort before it holds (a write that was rejected did not go out); after it the
-  release finishes and its outcome is reported. Every wait of the recheck (the paced reply wait, the
+  did not settle: an abort before it holds; after it the release finishes and its outcome is
+  reported. A write the transport refused before handing it to the device (`error.submitted ===
+  false`: gs_usb not open, or no free transmit slot) or that failed otherwise certainly did not
+  start the release: stop() keeps holding, and only a new stop() (a new recheck) releases. Every wait of the recheck (the paced reply wait, the
   spacing sleeps, both loop joins) wakes on the abort (stricter than Python 28621d6, where an
   interrupt during the release leaves some motors off and the rest holding).
 - When a hold, fault or shutdown is installed during a tick, every frame of that tick not yet sent
-  is dropped (position, gains, feed-forward and a regulated gripper alike); the next tick computes
-  them afresh (stricter than Python 28621d6, which sends the stale frames). User gains survive
+  is dropped (position, gains, feed-forward and a regulated gripper alike), and a regulated gripper's
+  cached output is recomputed even for the same feedback sample; the next tick computes them
+  afresh. The hold generation is taken before the feed-forward is computed: a hold or end of float
+  mode installed across that await drops the whole tick (a fault the feed-forward itself raises is
+  what that tick sends) (stricter than Python 28621d6, which sends the stale frames). User gains survive
   returnToRest(), a successful stop() and a new enable; only a stop() that does not release restores
   the profile's. The frame replay keeps Python's frames (and Python's single-read recheck) through
   `pythonFrameReplay()` from "/testing", a module-private registry no other code reaches.
@@ -118,8 +133,10 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
   pose (stricter than Python 28621d6, which leaves the last row as the target).
 - moveEe() planning: an expired allowance is checked before the path's own replaces it, and the
   straight-line poses are built cooperatively (`straightLineAsync`, a pause every 256 rows); the
-  caller stops waiting PLAN_GRACE_S after its timeout or abort even if the planner never settles,
-  and gives up the motion so a late result cannot commit (stricter than Python 28621d6).
+  caller stops waiting PLAN_GRACE_S after the earliest of its timeout, the planning stage's deadline
+  and the 60 s ceiling, or after its abort or the loss of its motion's ownership, even if the planner
+  never settles, and gives up the motion so a late result cannot commit (stricter than Python
+  28621d6).
 - setMotorId(): ids must be whole numbers at the arm, motor and protocol boundaries, before the bus
   is opened (stricter than Python 28621d6). The joints at both ids are marked unverified as soon as
   the persistent write may land (Motor.setId's onWrite) and cleared only once the change is

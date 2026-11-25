@@ -16,6 +16,11 @@ export abstract class CanBackend {
    */
   feedbackPacedControl = false;
   feedbackWaitTimeout = 0.015;
+  /**
+   * Why the last close() did not finish cleanly, for transports that record it instead of rejecting
+   * (null: it did, or the transport does not record it).
+   */
+  closeError: string | null = null;
 
   protected cb: RecvCallback | null = null;
 

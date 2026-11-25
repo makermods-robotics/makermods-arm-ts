@@ -176,6 +176,8 @@ export interface PlanOptions {
   cancel?: (() => boolean) | null;
   /** Gives the event loop a turn (default: a macrotask). */
   pause?: () => Promise<void>;
+  /** Called with the plan's Budget once it exists (a caller waiting on its deadline). */
+  onBudget?: ((budget: Budget) => void) | null;
 }
 
 /**
@@ -186,6 +188,7 @@ export async function plan(chain: kinematics.Chain, ik: trajectoryIk.TrajectoryI
                            rpy: readonly number[] | null, q0: readonly number[], rate: number, speed: number | null,
                            options: PlanOptions): Promise<EEPlan> {
   const budget = new Budget(options.clock, options.limit ?? null, options.cancel ?? null);
+  options.onBudget?.(budget);
   try {
     budget.check();
     const result = await planEe(chain, ik, target, rpy, q0, rate, speed,

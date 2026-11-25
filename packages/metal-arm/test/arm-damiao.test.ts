@@ -102,6 +102,17 @@ describe("arm on Damiao motors", () => {
     await arm.disconnect();
   });
 
+  it("stop() releases a checked joint whose motor answers late and twice when its readings agree", async () => {
+    // The SDK's late/duplicating Damiao (as seen on real motors) on a returned joint.
+    const { arm, fakes } = make([new FakeMotor(1, "jlo", { position: 0.3, late: true, duplicate: true }),
+      new FakeMotor(2, "jlo", { position: -0.5 })], { restSpeed: 10.0, restRateHz: 200, restTimeout: 2.0 });
+    await arm.connect();
+    await arm.enable();
+    expect(await arm.stop()).toBe(true);
+    expect(fakes[1]!.enabled).toBe(false);
+    await arm.disconnect();
+  });
+
   it("enable and disable with the late duplicating gripper", async () => {
     // The gripper withholds each reply until another frame is on the bus, then sends it twice.
     const { arm, fakes } = make([new FakeMotor(1, "jlo", { position: 0.3 }),

@@ -180,6 +180,31 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       });
     }
 
+    it("a never-settling planner with a long timeout gives up at the planning stage's deadline", async () => {
+      const { arm, clock } = await enabled();
+      try {
+        arm["planFn"] = () => new Promise<never>(() => {});
+        const t0 = clock.now();
+        expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.02]), { timeout: 3600 })).toBe(false);
+        expect(clock.now() - t0).toBeLessThan(planner.PLAN_START_S + 0.5);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
+    it("a never-settling planner gives up when a newer hold supersedes it", async () => {
+      const { arm, clock } = await enabled();
+      try {
+        arm["planFn"] = () => new Promise<never>(() => {});
+        clock.timer(0.3, () => arm.holdCurrentPosition());
+        const t0 = clock.now();
+        expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.02]), { timeout: 3600 })).toBe(false);
+        expect(clock.now() - t0).toBeLessThan(0.5);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
     it("a hold during planning drops the motion; no row is committed", async () => {
       const { arm, clock } = await enabled();
       try {

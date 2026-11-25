@@ -84,6 +84,11 @@ const owned = new Map<object, { owner: NodeGsUsbDevice; info: AdapterInfo }>();
 export class NodeGsUsbDevice implements UsbDeviceLike {
   readonly readsTimeOut = true;
   readonly #web: UsbDeviceLike;
+
+  /** libusb applies the endpoint timeout to every bulk transfer (set in claimInterface()). */
+  get nativeTransferTimeoutMs(): number {
+    return this.#timeoutMs;
+  }
   readonly #raw: RawDevice;
   readonly #platform: string;
   readonly #timeoutMs: number;

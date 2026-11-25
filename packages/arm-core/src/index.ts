@@ -3,7 +3,8 @@ export {
   ArmConfig, type ArmConfigInit, checkGains, degrees, JointConfig, type JointConfigInit, radians, type RawProfile,
 } from "./config.js";
 export {
-  ArmError, ConnectError, FaultLatched, HeldByAnotherProgram, ParamTimeout, RouteUnverified, StateError, TimeoutError, ValueError,
+  ArmError, ConnectError, FaultLatched, HeldByAnotherProgram, notSubmitted, ParamTimeout, RouteUnverified, StateError, TimeoutError,
+  ValueError,
 } from "./errors.js";
 export { ArmState } from "./state.js";
 export type { Motor, MotorFeedback, MotorStatus, ParamSpec, Product } from "./motor.js";

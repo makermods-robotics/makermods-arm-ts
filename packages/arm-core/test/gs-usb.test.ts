@@ -257,6 +257,30 @@ describe("send", () => {
     await backend.close();
   });
 
+  it("with a native transfer timeout (Node) a slow write that completes is not reported as timed out", async () => {
+    const { clock, dev, backend } = await opened({}, { ioTimeout: 0.1 });
+    const transferOut = dev.transferOut.bind(dev);
+    dev.transferOut = async (endpoint: number, data: BufferSource) => {
+      await clock.sleep(0.15); // the process was descheduled: the transfer completes late
+      return transferOut(endpoint, data);
+    };
+    await expect(backend.send(1, new Uint8Array(8), false)).rejects.toThrow(TimeoutError); // browser: the JS deadline
+    Object.defineProperty(dev, "nativeTransferTimeoutMs", { value: 100 }); // libusb bounds it at 100 ms itself
+    await expect(backend.send(1, new Uint8Array(8), false)).resolves.toBeUndefined();
+    await backend.close();
+  });
+
+  it("frames refused before submission carry submitted: false", async () => {
+    const { backend } = await opened({ ack: false }, { ioTimeout: 0.02 });
+    for (let i = 0; i < MAX_IN_FLIGHT; i++) await backend.send(1, new Uint8Array(8), false);
+    const refused = await backend.send(1, new Uint8Array(8), false).then(() => null, (e: unknown) => e);
+    expect(refused).toBeInstanceOf(TimeoutError);
+    expect((refused as TimeoutError).submitted).toBe(false);
+    await backend.close();
+    const closed = await backend.send(1, new Uint8Array(8), false).then(() => null, (e: unknown) => e);
+    expect((closed as TimeoutError).submitted).toBe(false);
+  });
+
   it("echoes free the in-flight budget", async () => {
     const { dev, backend } = await opened({}, { ioTimeout: 0.05 });
     for (let i = 0; i < 5 * MAX_IN_FLIGHT; i++) await backend.send(1, new Uint8Array(8), false);

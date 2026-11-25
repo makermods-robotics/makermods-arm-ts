@@ -67,13 +67,12 @@ export const FRAME_SPACING_S = 200e-6;
 export const FRAME_SPACING = FRAME_SPACING_S;
 /** attach(): below this model holding torque (N·m, over the chain) gravity starts from zero. */
 export const ATTACH_LOAD_MIN_NM = 0.1;
-/** s: a write in stop()'s recheck or a shutdown that does not complete in this time counts as failed. */
-export const SEND_TIMEOUT_S = 0.1;
 /**
- * stop()'s recheck waits for the bus to go quiet: no reply from any motor for REPLY_TIMEOUT, within
- * this many seconds; replies that keep arriving refuse the release.
+ * s: a write in stop()'s recheck or a shutdown that has not settled in this time counts as failed
+ * (possibly sent). A backstop for a transport that never settles a write: the shipped transports
+ * bound their own writes well within it (gs_usb's ioTimeout, or the native USB timeout in Node).
  */
-export const QUIET_BOUND_S = 0.25;
+export const SEND_TIMEOUT_S = 1.0;
 /** rad: the two reads of stop()'s recheck must agree within this for every checked joint. */
 export const REST_AGREE = radians(0.5);
 /** s: moveEe stops waiting for a planner this long after its deadline or abort (a planner that never settles). */
@@ -252,7 +251,9 @@ export class Arm {
    * Motion ownership: bumped by every new target, stop, estop, disable, fault, return to rest and
    * new session. A moveEe commits its rows only while the value it took is still current.
    */
-  private motion = 0;
+  #motionValue = 0;
+  /** Notified whenever `motion` changes (a moveEe waiting on its planner wakes on ownership loss). */
+  #motionSignal = new Signal();
   /** Joint index -> why its id no longer surely reaches its motor (a set-id that left both ids answering). */
   private unverified = new Map<number, string>();
   /** Disabled after a fault (release_on_fault). */
@@ -284,6 +285,10 @@ export class Arm {
   #stopAbort: AbortSignal | null = null;
   /** Bumped by every hold, fault and shutdown: a tick drops its unsent frames when it changes. */
   #holdEpoch = 0;
+  /** stop()'s recheck: called with each joint's index right before its frame is submitted. */
+  #beforeSend: ((i: number) => void) | null = null;
+  /** The hold generation a fault of the feed-forward itself installed (#feedforward), else null. */
+  #ffFaultEpoch: number | null = null;
   /** Releases (#releaseAll) so far; estop() tells by it whether its confirmed pass ran. */
   #releaseRuns = 0;
 
@@ -299,8 +304,6 @@ export class Arm {
   private running = false;
   private loop: LoopHandle | null = null;
   #tickSignal = new Signal();
-  /** Notified after every received frame (stop()'s quiet wait). */
-  #rxSignal = new Signal();
   /** Per-session full-turn correction (joint coordinates). */
   private wrap: number[];
 
@@ -333,6 +336,15 @@ export class Arm {
     return this.#state;
   }
 
+  private get motion(): number {
+    return this.#motionValue;
+  }
+
+  private set motion(value: number) {
+    this.#motionValue = value;
+    this.#motionSignal.notify();
+  }
+
   get jointNames(): string[] {
     return this.config.joints.map((j) => j.label);
   }
@@ -350,7 +362,6 @@ export class Arm {
     const id = this.config.product.route(canId, data, this.config.hostId, extended);
     const m = id === null ? undefined : this.#byId.get(id);
     if (m !== undefined) m.handleFrame(canId, data, extended);
-    this.#rxSignal.notify();
   };
 
   // ── connection management ──
@@ -488,15 +499,31 @@ export class Arm {
       await this.#stopLoop();
       // An e-stop issued meanwhile owns the transport: its confirmed release runs before the bus closes.
       if (this.#estopPending) await this.#disable();
+      const energized = this.#state === ArmState.ENABLED || this.#state === ArmState.FAULT;
       try {
         await this.#backend.close();
       } catch (e) {
-        if (this.#state === ArmState.ENABLED || this.#state === ArmState.FAULT) {
-          // The bus may still be usable: keep servicing the hold rather than leaving it unattended.
+        if (energized) {
+          // The bus may still be usable: keep servicing the arm, holding where it is now (the motion
+          // in flight before detach() is given up), rather than leaving it unattended.
           this.#log.error(`detach(): closing the bus failed (${errorText(e)}); the control loop holds the arm again`);
+          this.#endMotion();
+          this.holdCurrentPosition();
           this.#startLoop();
         }
         throw e;
+      }
+      // A transport that records a failed close instead of rejecting (gs_usb, SLCAN): the bus is
+      // closed as far as this Arm can tell, so nothing can service the hold any more.
+      const closeError = this.#backend.closeError;
+      if (closeError) {
+        if (energized) {
+          this.#log.error(`detach(): the bus did not close cleanly (${closeError}); the arm is energized and nothing `
+            + "services it: its motors hold their last command until their watchdogs act");
+          throw new ConnectError(`detach(): the bus did not close cleanly (${closeError}); the arm is still energized `
+            + "and not serviced (loopRunning is false)");
+        }
+        throw new ConnectError(`detach(): the bus did not close cleanly (${closeError})`);
       }
       this.#state = ArmState.DISCONNECTED;
       return releasing;
@@ -850,6 +877,11 @@ export class Arm {
   #carriedLoad(model: gravity.GravityFeedforward, torque: Array<boolean | null>): number {
     const n = model.n;
     if (!torque.slice(0, n).every((t) => t === true)) return 0.0;
+    // And still now: the latest reading of every chain joint reports torque on.
+    if (!this.motors.slice(0, n).every((m) => m.feedback !== null && m.feedback.enabled === true)) {
+      this.#log.warn("attach(): a chain joint no longer reports torque on; gravity eases in from zero");
+      return 0.0;
+    }
     if (!this.motors.slice(0, n).every((m) => m.feedbackAge <= this.config.feedbackTimeout)) {
       this.#log.warn("attach(): a chain joint's reading is older than feedbackTimeout; gravity eases in from zero");
       return 0.0;
@@ -1069,8 +1101,14 @@ export class Arm {
           await this.#bounded(m.sendCommand(this.#toMotor(i, positions[i]!), 0.0, 0.0, 0.0, 0.0), `motor ${m.motorId} neutral command`);
           committed = true;
         } catch (e) {
-          if (e instanceof TimeoutError) committed = true;
           this.#log.error(`failed to neutralize motor ${m.motorId}: ${errorText(e)}`);
+          if (e instanceof TimeoutError && e.submitted !== false) {
+            committed = true; // it may have gone out
+          } else if (!committed && stopped !== null) {
+            // stop()'s release: the first torque-off write certainly did not go out, so the release has
+            // not begun; it is not resumed on the recheck's now older readings.
+            return "aborted";
+          }
         }
       }
     }
@@ -1221,8 +1259,7 @@ export class Arm {
       const wake = (): void => {
         this.#manualSession = null;
         this.#tickSignal.notify();
-        this.#rxSignal.notify();
-        for (const m of this.motors) m.changed.notify();
+            for (const m of this.motors) m.changed.notify();
       };
       signal?.addEventListener("abort", wake);
       this.#stopAbort = signal ?? null;
@@ -1298,21 +1335,21 @@ export class Arm {
    * restSettle of the supported pose.
    *
    * MIT feedback carries no request id and a reading's age is its host receipt time, so the
-   * reading is established by procedure: after the loop stops, the bus must go quiet (no reply from
-   * any motor for REPLY_TIMEOUT, within QUIET_BOUND_S); then two read cycles each send the holding
-   * frame and require exactly one reply from every checked joint after that cycle's request, younger
-   * than min(feedbackTimeout, REST_FRESH_S); both cycles' poses must meet the criteria and agree
-   * within REST_AGREE, and no reply may arrive after the second cycle before the release. Any
-   * ambiguity (replies that keep the bus from going quiet, a missing reply, more replies than
-   * requests, a stale age, a fault, a state change, an abort, a write that does not complete within
-   * SEND_TIMEOUT_S) keeps the arm holding.
+   * reading is established by receive order: two read cycles each send every motor its holding frame
+   * (no status poll); for each checked joint a sequence snapshot is taken right before ITS frame is
+   * submitted, and at least one reply from that joint must arrive after it (duplicates and late
+   * replies are tolerated; the latest reading in the cycle is the one judged), within `bound` =
+   * min(feedbackTimeout, REST_FRESH_S, half the shortest armed motor watchdog), so the holding
+   * frames keep coming and no watchdog trips inside a successful recheck. Frames from joints that
+   * are not checked never matter. Both cycles' poses must meet the release criteria and agree within
+   * REST_AGREE; faults and the arm state are judged last. A missing reply, a stale reading, a fault,
+   * a state change, an abort or a write that does not complete within SEND_TIMEOUT_S keeps the arm
+   * holding.
    *
-   * What this establishes: every reply counted arrived after a quiet window in which nothing was
-   * in flight, one per request. What it does not: a device that keeps replies longer than the quiet
-   * window without delivering any, then releases exactly one stored reply per new request, passes
-   * if it holds two or more stored replies (two stale replies in a row, agreeing with each other);
-   * with one stored reply the second cycle's reading answers the first cycle's request, which was
-   * sent after the loop stopped.
+   * What this establishes: twice, each checked joint answered after its own request was submitted
+   * (receive order). What it cannot: prove where an untagged reply came from. It is fooled by two
+   * consecutive stale readings of the same joint (a late or duplicated earlier reply arriving right
+   * after each of its requests) that agree with each other while both real replies are lost.
    *
    * The point of no return is the first torque-off frame that was accepted by the transport or
    * whose write did not settle: an abort before it holds; after it the release is finished and its
@@ -1339,7 +1376,6 @@ export class Arm {
     };
     const fresh = pyMin(cfg.feedbackTimeout, REST_FRESH_S);
     const poses: number[][] = [];
-    let after: number[] = [];
     if (pythonFrameArms.has(this)) {
       // The Python SDK's recheck: one read, judged on the replies that follow it.
       const sequences = this.motors.map((m) => m.feedbackSequence);
@@ -1356,27 +1392,42 @@ export class Arm {
       }
       poses.push(this.getJointPositions());
     } else {
-      if (!(await this.#busQuiet(stopped))) {
-        return this.#keepHolding(stopped() ? "stop() was interrupted" : "replies kept arriving after the control loop stopped");
-      }
+      // Each cycle waits at most `bound` for the replies, so the next holding frame (the second
+      // cycle's, then the release's) follows the last within it: half the shortest armed motor
+      // watchdog keeps every watchdog from tripping inside a successful recheck.
+      const watchdogs = [...this.watchdogRestore.keys()].map((i) => cfg.joints[i]!.canTimeoutMs).filter((ms): ms is number => ms !== null);
+      const bound = pyMin(fresh, watchdogs.length ? Math.min(...watchdogs) / 1000 / 2 : Infinity);
+      const isChecked = new Set(checked);
       for (let cycle = 0; cycle < 2; cycle++) {
-        const sequences = this.motors.map((m) => m.feedbackSequence);
-        if (!(await read(false))) return this.#keepHolding("stop() was interrupted or the read failed");
-        const deadline = this.#clock.now() + fresh;
+        // Each checked joint's own snapshot, taken right before its frame is submitted: only
+        // feedback received after that counts for it.
+        const snapshots = new Map<number, number>();
+        this.#beforeSend = (i: number): void => {
+          if (isChecked.has(i)) snapshots.set(i, this.motors[i]!.feedbackSequence);
+        };
+        let ok: boolean;
+        try {
+          ok = await read(false);
+        } finally {
+          this.#beforeSend = null;
+        }
+        if (!ok) return this.#keepHolding("stop() was interrupted or the read failed");
+        const replied = (i: number): boolean => snapshots.has(i) && this.motors[i]!.feedbackSequence > snapshots.get(i)!;
+        const deadline = this.#clock.now() + bound;
         for (const i of checked) {
           const m = this.motors[i]!;
           const left = deadline - this.#clock.now();
           if (left <= 0) break;
-          await m.changed.wait(() => m.feedbackSequence !== sequences[i] || stopped(), left, this.#clock);
+          await m.changed.wait(() => replied(i) || stopped(), left, this.#clock);
           if (stopped()) return this.#keepHolding("stop() was interrupted");
         }
         for (const i of checked) {
           const m = this.motors[i]!, label = cfg.joints[i]!.label;
-          const replies = m.feedbackSequence - sequences[i]!;
-          if (replies === 0) return this.#keepHolding(`no reply from ${label} to read ${cycle + 1}`);
-          if (replies > 1) return this.#keepHolding(`${replies} replies from ${label} to one request in read ${cycle + 1}`);
-          if (!(m.feedbackAge <= fresh)) return this.#keepHolding(`${label}'s reply to read ${cycle + 1} is stale`);
+          if (!snapshots.has(i)) return this.#keepHolding(`no frame went to ${label} in read ${cycle + 1}`);
+          if (!replied(i)) return this.#keepHolding(`no reply from ${label} after its frame in read ${cycle + 1}`);
+          if (!(m.feedbackAge <= bound)) return this.#keepHolding(`${label}'s reply to read ${cycle + 1} is stale`);
         }
+        // The latest reading of each joint in this cycle is the one judged.
         poses.push(this.getJointPositions());
       }
       for (const i of checked) {
@@ -1385,7 +1436,6 @@ export class Arm {
             + `(${degrees(Math.abs(poses[0]![i]! - poses[1]![i]!)).toFixed(2)} deg)`);
         }
       }
-      after = this.motors.map((m) => m.feedbackSequence);
     }
     // Faults a reply latched during the waits count too: judged right before the release.
     await this.#checkHealth();
@@ -1395,8 +1445,6 @@ export class Arm {
       problem = `state ${stateName(this.#state)}`;
     } else if (faulty >= 0) {
       problem = `${cfg.joints[faulty]!.label} reports a fault (${this.motors[faulty]!.faultLatched})`;
-    } else if (after.length && checked.some((i) => this.motors[i]!.feedbackSequence !== after[i])) {
-      problem = "a reply arrived after the last read";
     } else {
       for (const now of poses) {
         for (const i of include) {
@@ -1418,7 +1466,10 @@ export class Arm {
     if (problem === null && stopped()) problem = "stop() was interrupted";
     if (problem !== null) return this.#keepHolding(problem);
     const outcome = await this.#releaseAll(stopped);
-    if (outcome === "aborted") return this.#keepHolding("stop() was interrupted before the first torque-off frame was sent");
+    if (outcome === "aborted") {
+      return this.#keepHolding(stopped() ? "stop() was interrupted before the first torque-off frame was sent"
+        : "the first torque-off write did not go out; stop() again rechecks before releasing");
+    }
     this.released.clear();
     this.faulted.clear();
     this.#state = ArmState.CONNECTED;
@@ -1427,29 +1478,6 @@ export class Arm {
         + "the control loop is stopped; disable() tries again, or cut motor power");
     }
     return true;
-  }
-
-  /**
-   * True once no motor has replied for REPLY_TIMEOUT; false when replies keep arriving past
-   * QUIET_BOUND_S, or on `stopped()`.
-   */
-  async #busQuiet(stopped: () => boolean): Promise<boolean> {
-    const bound = this.#clock.now() + QUIET_BOUND_S;
-    const total = (): number => this.motors.reduce((sum, m) => sum + m.feedbackSequence, 0);
-    let seen = total(), since = this.#clock.now();
-    for (;;) {
-      if (stopped()) return false;
-      const now = this.#clock.now();
-      const quietAt = since + this.REPLY_TIMEOUT;
-      if (now >= quietAt) return true;
-      if (now >= bound) return false;
-      const left = pyMin(quietAt, bound) - now;
-      await this.#rxSignal.wait(() => total() !== seen || stopped(), left, this.#clock);
-      if (total() !== seen) {
-        seen = total();
-        since = this.#clock.now();
-      }
-    }
   }
 
   #keepHolding(problem: string): boolean {
@@ -1786,12 +1814,15 @@ export class Arm {
     const superseded = (): boolean => this.motion !== token;
     const current = this.getCommandedPositions();
     const q0 = current.slice(0, chain.n);
+    const stage: { budget: planner.Budget | null } = { budget: null };
     const planning = this.planFn(chain, ik, target, rpyGoal, q0, cfg.controlRateHz, speed ?? null, {
       clock: this.#clock, limit: timeout ?? null, cancel: () => superseded() || Boolean(signal?.aborted), pause: this.planPause,
+      onBudget: (budget) => (stage.budget = budget),
     });
-    // The caller wakes on its own deadline and abort even if the planner never settles; the motion
-    // is then given up, so a late result cannot commit.
-    const plan = await this.#awaitPlan(planning, timeout ?? null, signal);
+    // The caller wakes on its own deadline, the planning stage's and the ceiling, on its abort and
+    // on losing ownership, even if the planner never settles; the motion is then given up, so a late
+    // result cannot commit.
+    const plan = await this.#awaitPlan(planning, timeout ?? null, signal, token, stage);
     if (plan === null) {
       if (this.motion === token) this.motion += 1;
       this.#log.warn("moveEe rejected: planning did not finish before its deadline or abort; nothing was sent");
@@ -1820,34 +1851,49 @@ export class Arm {
   }
 
   /**
-   * `planning`, or null PLAN_GRACE_S after `timeout` (s, from now; else the planner's own ceiling)
-   * has passed or `signal` was aborted, whichever comes first.
+   * `planning`, or null PLAN_GRACE_S after the earliest of: `timeout` (s, from now), the planning
+   * stage's current deadline (its Budget's end, PLAN_START_S until the planner reports one) and
+   * PLAN_CEILING_S; or PLAN_GRACE_S after `signal` is aborted or motion `token` stops owning the
+   * targets. The grace lets a responsive planner refuse on its own first.
    */
-  #awaitPlan(planning: Promise<planner.EEPlan>, timeout: number | null, signal: AbortSignal | undefined): Promise<planner.EEPlan | null> {
+  #awaitPlan(planning: Promise<planner.EEPlan>, timeout: number | null, signal: AbortSignal | undefined, token: number,
+             stage: { budget: planner.Budget | null }): Promise<planner.EEPlan | null> {
+    const start = this.#clock.now();
     return new Promise<planner.EEPlan | null>((resolve, reject) => {
       let done = false;
+      let cancelDeadline: () => void = () => {};
+      let cancelGrace: (() => void) | null = null;
       const finish = (): void => {
         done = true;
-        cancel();
-        signal?.removeEventListener("abort", onAbort);
+        cancelDeadline();
+        cancelGrace?.();
+        signal?.removeEventListener("abort", lost);
+        this.#motionSignal.notify(); // ends the ownership watch below
       };
       const giveUp = (): void => {
         if (done) return;
         finish();
         resolve(null);
       };
-      // The planner refuses on its own at its next pause; PLAN_GRACE_S later the caller stops waiting.
-      let graceCancel: () => void = () => {};
-      const onAbort = (): void => {
-        if (!done) graceCancel = this.#clock.timer(PLAN_GRACE_S, giveUp);
+      const lost = (): void => {
+        if (!done && cancelGrace === null) cancelGrace = this.#clock.timer(PLAN_GRACE_S, giveUp);
       };
-      const deadline = this.#clock.timer((timeout ?? planner.PLAN_CEILING_S) + PLAN_GRACE_S, giveUp);
-      const cancel = (): void => {
-        deadline();
-        graceCancel();
+      const limit = (): number => pyMin(pyMin(timeout === null ? Infinity : start + timeout, start + planner.PLAN_CEILING_S),
+        stage.budget !== null ? stage.budget.end() : start + planner.PLAN_START_S) + PLAN_GRACE_S;
+      // The stage's deadline moves when the path length is known: re-armed until it is reached.
+      const arm = (): void => {
+        if (done) return;
+        const left = limit() - this.#clock.now();
+        if (left <= 0) giveUp();
+        else cancelDeadline = this.#clock.timer(left, arm);
       };
-      signal?.addEventListener("abort", onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      arm();
+      signal?.addEventListener("abort", lost, { once: true });
+      if (signal?.aborted) lost();
+      void this.#motionSignal.wait(() => done || this.motion !== token, planner.PLAN_CEILING_S + 2 * PLAN_GRACE_S, this.#clock)
+        .then(() => {
+          if (!done && this.motion !== token) lost();
+        });
       planning.then((plan) => {
         if (done) return;
         finish();
@@ -2004,7 +2050,7 @@ export class Arm {
     const positions = this.getJointPositions();
     if (token !== null && token !== this.motion) return false;
     this.motion += 1;
-    this.#holdEpoch += 1;
+    this.#bumpHold();
     positions.forEach((p, i) => {
       if (Number.isFinite(p)) {
         this.userTargets[i] = p;
@@ -2255,16 +2301,20 @@ export class Arm {
     const manual = session !== null && session === this.#manualSession;
     const abort = manual ? this.#stopAbort : null;
     const send = (p: Promise<void>, what: string): Promise<void> => (manual ? this.#bounded(p, what) : p);
+    const before = this.#holdEpoch;
+    this.#ffFaultEpoch = null;
     const feedforward = await this.#feedforward(computed, now);
-    // A hold or fault the feed-forward itself installed (losing gravity while floating) is what this
-    // tick sends; one installed later drops the frames not yet sent.
+    // A fault the feed-forward itself installed (losing gravity while floating) is what this tick
+    // sends: the held command, the restored gains and no extra torque. A hold, fault or end of float
+    // mode installed by anything else across that await drops the whole tick; one installed later
+    // drops the frames not yet sent.
     const commands = compat ? computed : [...this.internal];
     const epoch = this.#holdEpoch;
+    let superseded = !compat && epoch !== before && epoch !== this.#ffFaultEpoch;
     const paced = this.#backend.feedbackPacedControl;
     const joints = cfg.joints;
     let lastSend: number | null = null;
-    let superseded = false;
-    for (let i = 0; i < joints.length; i++) {
+    for (let i = 0; i < joints.length && !superseded; i++) {
       const j = joints[i]!;
       if (!this.#maySend(session)) return;
       const motor = this.motors[i]!;
@@ -2297,10 +2347,13 @@ export class Arm {
         if (!this.#maySend(session)) return;
         if (this.#holdEpoch !== epoch && !compat) {
           superseded = true;
+          // A regulated gripper output computed for a dropped frame is not reused for the next one.
+          this.holdOut.clear();
           break;
         }
         lastSend = this.#clock.now();
         sentAt = this.#clock.now();
+        this.#beforeSend?.(i);
         await send(motor.sendCommand(this.#toMotor(i, position), 0.0, kp, kd, tau), `${j.label} command`);
       } catch (e) {
         if (!this.faulted.has(i)) await this.#enterFault(`${j.label}: command failed (${errorText(e)})`, i);
@@ -2422,7 +2475,10 @@ export class Arm {
         this.#log.error(`gravity feed-forward failed; off until the next enable: ${errorText(failure)}`);
         this.gravity = null;
         tau = new Array<number>(n).fill(0.0);
-        if (this.floating) await this.#enterFault(`gravity feed-forward failed while floating (${errorText(failure)})`);
+        if (this.floating) {
+          await this.#enterFault(`gravity feed-forward failed while floating (${errorText(failure)})`);
+          this.#ffFaultEpoch = this.#holdEpoch;
+        }
       }
     }
     const extra = this.extraTorque;
@@ -2582,6 +2638,15 @@ export class Arm {
     return this.#enterFault(reason, index);
   }
 
+  /**
+   * A hold or fault was installed: the tick in flight drops its unsent frames, and a regulated
+   * gripper's cached output is recomputed even for the same feedback sample.
+   */
+  #bumpHold(): void {
+    this.#holdEpoch += 1;
+    if (!pythonFrameArms.has(this)) this.holdOut.clear();
+  }
+
   /** Invalidate any motion in flight (a moveEe being planned or streamed). */
   #endMotion(): void {
     this.motion += 1;
@@ -2603,7 +2668,7 @@ export class Arm {
   async #enterFault(reason: string, index: number | null = null): Promise<void> {
     this.#log.error(`FAULT: ${reason}`);
     this.#endMotion();
-    this.#holdEpoch += 1;
+    this.#bumpHold();
     this.faultReasons.push(reason);
     if (this.faultReason === null) this.faultReason = reason;
     if (this.floating) this.#endFloat();

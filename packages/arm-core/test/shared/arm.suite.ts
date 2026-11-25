@@ -1,6 +1,6 @@
 // Port of the Python SDK's tests/unit/test_arm.py.
 import { describe, expect, it } from "vitest";
-import { type ArmConfigInit, ArmState, ConnectError, HeldByAnotherProgram, StateError, ValueError } from "@makermods/arm-core";
+import { type ArmConfigInit, ArmState, ConnectError, HeldByAnotherProgram, StateError, TimeoutError, ValueError } from "@makermods/arm-core";
 import { VirtualClock } from "@makermods/arm-core/testing";
 import { type ArmFakes, commands, type FakeMotorLike, type FakeMotorOptions, type Made, waitFor } from "./fakes.js";
 
@@ -959,6 +959,208 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       await arm.estop();
       expect(arm.state).toBe(ArmState.CONNECTED);
       expect(fakes[1]!.enabled).toBe(false);
+    });
+
+    // ── third review: per-joint recheck snapshots, no quiet window ──
+    it("recheck: a duplicate of a joint's earlier reading arriving during another joint's command does not count", async () => {
+      // Both joints are checked; in read 2 a copy of the second joint's read-1 reply arrives while the
+      // first joint is commanded, and the second joint's own reply is lost after it moved.
+      const joints = twoJointConfig().joints.map((j, i) => (i === 1 ? j.replace({ returnToRest: true }) : j));
+      const { arm, fakes, bus } = make(null, fastRest({ joints }));
+      await arm.connect();
+      await arm.enable();
+      let reads = 0, first: Array<[number, Uint8Array]> = [];
+      const h1 = fakes[1]!.handle.bind(fakes[1]!), h2 = fakes[2]!.handle.bind(fakes[2]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = h1(canId, data);
+        if (!arm["running"] && arm.state === ArmState.ENABLED && classify(canId, data)[0] === "command" && ++reads === 2) {
+          first.forEach(([id, d]) => bus.inject(id, d)); // the duplicate, during joint 1's command
+        }
+        return replies;
+      };
+      fakes[2]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = h2(canId, data);
+        if (arm["running"] || arm.state !== ArmState.ENABLED || classify(canId, data)[0] !== "command") return replies;
+        if (reads === 1) {
+          first = replies;
+          return replies;
+        }
+        fakes[2]!.track = false;
+        fakes[2]!.position += 0.45; // moved, and its own reply is lost
+        return [];
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[2]!.enabled).toBe(true);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("recheck: a 30 ms motor watchdog on a stiff joint never trips and the arm releases", async () => {
+      const joints = twoJointConfig().joints.map((j, i) => (i === 0 ? j.replace({ canTimeoutMs: 30 }) : j));
+      const { arm, fakes, clock } = make([new FakeMotor(1, MODEL, { position: 0.3, paramsSupported: true }),
+        new FakeMotor(2, MODEL, { position: -0.5 })], fastRest({ joints }));
+      await arm.connect();
+      await arm.enable();
+      let last = clock.now(), tripped = false;
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        if (classify(canId, data)[0] === "command" && fakes[1]!.enabled) {
+          if (clock.now() - last > 0.030) tripped = true; // the motor's own watchdog would have released it
+          last = clock.now();
+        }
+        return handle(canId, data);
+      };
+      try {
+        expect(await arm.stop()).toBe(true);
+        expect(tripped).toBe(false);
+      } finally {
+        await arm.disconnect();
+      }
+    });
+
+    it("recheck: unsolicited feedback every 20 ms from a motor that is not checked does not block the release", async () => {
+      const { arm, fakes, bus, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let reply: Array<[number, Uint8Array]> = [];
+      const handle = fakes[2]!.handle.bind(fakes[2]!);
+      fakes[2]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = handle(canId, data);
+        if (classify(canId, data)[0] === "command" && replies.length) reply = replies;
+        return replies;
+      };
+      let chatter = true;
+      const tick = (): void => {
+        if (!chatter) return;
+        reply.forEach(([id, d]) => bus.inject(id, d)); // the gripper (not checked) reports on its own
+        clock.timer(0.02, tick);
+      };
+      clock.timer(0.02, tick);
+      try {
+        expect(await arm.stop()).toBe(true);
+      } finally {
+        chatter = false;
+        await arm.disconnect();
+      }
+    });
+
+    it("an abort during the first neutral write that the transport refused before submitting it keeps the arm holding", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const interrupt = new AbortController();
+      const motor = arm.motors[0]!;
+      const send = motor.sendCommand.bind(motor);
+      let refused = false;
+      motor.sendCommand = (pos: number, vel: number, kp: number, kd: number, tau: number) => {
+        if (!refused && !arm["running"] && kp === 0 && kd === 0) {
+          refused = true;
+          interrupt.abort();
+          // gs_usb's in-flight cap: no transmit slot came free, nothing was handed to the device
+          const e = new TimeoutError("frames were never acknowledged on the CAN bus");
+          Object.defineProperty(e, "submitted", { value: false }); // as notSubmitted() marks it
+          return Promise.reject(e);
+        }
+        return send(pos, vel, kp, kd, tau);
+      };
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(refused).toBe(true);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(fakes[1]!.log.filter((e) => e === "disable").length).toBe(0);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("a dropped gripper frame is recomputed after the hold, not re-sent from the regulator's cache", async () => {
+      const joints = twoJointConfig().joints.map((j, i) => (i === 1 ? j.replace({ holdTorqueNm: 0.5 }) : j));
+      const { arm, fakes, bus, clock } = make(null, { joints });
+      await arm.connect();
+      await arm.enable({ startLoop: false });
+      arm["synced"] = [true, true];
+      fakes[2]!.track = false; // the gripper stays where it is
+      const held = arm.getJointPositions()[1]!;
+      expect(arm.setJointTargets([0.3, -1.4])).toBe(true);
+      const send = bus.send.bind(bus);
+      let slow = true;
+      bus.send = async (canId: number, data: Uint8Array, extended = true) => {
+        if (slow && classify(canId, data)[0] === "command" && canId === 1) {
+          slow = false;
+          await send(canId, data, extended);
+          await clock.sleep(0.002);
+          arm.holdCurrentPosition(); // the gripper's frame of this tick is dropped
+          return;
+        }
+        return send(canId, data, extended);
+      };
+      await arm["tick"](0.005);
+      const before = fakes[2]!.frames.length;
+      await arm["tick"](0.005); // same gripper feedback sample as the dropped frame was computed from
+      expect(fakes[2]!.frames.length).toBe(before + 1);
+      expect(Math.abs(fakes[2]!.frames.at(-1)![0] - held)).toBeLessThan(0.05);
+      bus.send = send;
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("ending float mode and holding across the feed-forward drops the tick: no old extra torque goes out", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable({ startLoop: false });
+      arm.floatMode(0.2, () => {
+        queueMicrotask(() => {
+          arm.setGains(); // float mode ends (profile stiffness) ...
+          arm.holdCurrentPosition(); // ... and a hold is installed while this tick awaits its feed-forward
+        });
+        return [1.077, 0.0];
+      });
+      const mark = fakes[1]!.frames.length;
+      await arm["tick"](0.005);
+      const sent = fakes[1]!.frames.slice(mark);
+      expect(sent.some(([, , tau]) => Math.abs(tau - 1.077) < 0.05)).toBe(false);
+      await arm["tick"](0.005);
+      expect(fakes[1]!.frames.at(-1)![1]).toBeCloseTo(twoJointConfig().joints[0]!.kp, 0);
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("a failed bus close during detach() holds where the arm is, not the old target", async () => {
+      const { arm, bus, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      arm["synced"] = [true, true];
+      expect(arm.setJointTargets([1.8, -0.5])).toBe(true);
+      await clock.sleep(0.01); // moving toward 1.8
+      const close = bus.close.bind(bus);
+      bus.close = () => Promise.reject(new Error("the adapter went away"));
+      await expect(arm.detach()).rejects.toThrow(/went away/);
+      const where = arm.getJointPositions()[0]!;
+      await clock.sleep(0.3);
+      expect(Math.abs(arm.getJointPositions()[0]! - where)).toBeLessThan(0.02);
+      expect(arm.loopRunning).toBe(true);
+      bus.close = close;
+      await arm.disable();
+      await arm.disconnect();
+    });
+
+    it("a close the transport records as failed is reported by detach(): energized and not serviced", async () => {
+      const { arm, bus } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const close = bus.close.bind(bus);
+      bus.close = async () => {
+        await close();
+        bus.closeError = "MODE reset failed"; // gs_usb and SLCAN record it instead of rejecting
+      };
+      await expect(arm.detach()).rejects.toThrow(/did not close cleanly.*energized/);
+      expect(arm.state).toBe(ArmState.ENABLED);
+      expect(arm.loopRunning).toBe(false);
     });
 
     it("enable() right after estop() is refused until the e-stop has finished", async () => {

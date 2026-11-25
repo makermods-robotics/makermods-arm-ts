@@ -248,7 +248,7 @@ export class SlcanSerialBackend extends CanBackend {
    * written or a port that would not close, so the adapter's channel may still be open. Null when
    * clean; reset by open().
    */
-  closeError: string | null = null;
+  override closeError: string | null = null;
 
   #name: string | undefined;
   #log: TransportLogger;
