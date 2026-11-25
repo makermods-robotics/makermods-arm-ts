@@ -1,7 +1,7 @@
 # Hardware testing
 
 What has run on real arms and what has not. The first two tables are from commit `6142f53`; the
-section after them is from `4e2844f`, which changed how `stop()`, `attach()` and `moveEe` end. Every
+section after them is from `4e2844f` to `8fe84da`, which changed how `stop()`, `attach()` and `moveEe` end. Every
 powered test ran at a hover pose, the tool point 5 to 6 cm above its rest height, and ended with the
 arm at rest and torque off. Comparisons are against the Python SDKs on the same arm in the same
 session.
@@ -29,10 +29,12 @@ From Chromium over WebUSB (Metal Arm; the adapter granted by policy, see below):
 | Two arms from one `Rig` in one page / in one Web Worker | 97.9 and 97.8 Hz / 98.6 and 98.6 Hz |
 | `Camera` with three identical USB cameras | each 30 Hz alone; 30, 15 and 15 Hz together (two share a USB 2 bus) |
 
-## At `4e2844f`: stop, takeover and motion ownership
+## At `4e2844f` to `8fe84da`: stop, takeover and motion ownership
 
-One Metal arm (the left one), Node 24 unless marked, against metal-arm-sdk `36c0bb4`. The other
-Metal arm and the Maker arm have not run at this commit.
+One Metal arm (the left one), Node 24 unless marked, against metal-arm-sdk `36c0bb4`. The rows ran
+at `4e2844f`; the stop, kill, cycle, sine and ownership rows ran again at `46386e4` or `8fe84da`
+with the same results, and the stalled-thread row is from `8fe84da`. The other Metal arm has not
+run at these commits.
 
 | Test | Result |
 |---|---|
@@ -51,6 +53,7 @@ Metal arm and the Maker arm have not run at this commit.
 | `moveEe` with a 1 ms planning timeout | resolved false, nothing sent |
 | Chromium over WebUSB, in a page / in a Web Worker | 100 Hz both (p99 10.5 / 10.2 ms); tracking as from Node; `Camera` as above |
 | `examples/node/check-sine.ts` on Node 22, and with one Ctrl-C mid-sine | ran and released; the Ctrl-C stopped the motion, returned to rest and released |
+| The application's thread blocked for 60, 150, 300 and 450 ms while the arm held | still enabled, no fault, loop back at 100 Hz, no movement; then released at rest |
 
 ## Limits corrected during the run
 
@@ -69,8 +72,9 @@ corrected criterion and passed; none is an open failure.
 ## Not tested
 
 - Any motion above hover height, and any contact with an object.
-- At `4e2844f`: the Maker arm, the second Metal arm, two arms together, `setMotorId`, and an
-  `enable()` refused with `HeldByAnotherProgram`.
+- At these commits: the second Metal arm, two arms together, `setMotorId`, and an `enable()`
+  refused with `HeldByAnotherProgram`. The Maker arm's results at these commits are not in this
+  file yet.
 - A policy-driven episode (the Dream client with these arms).
 - Two Maker arms; the SO-101; a Star leader; an SLCAN adapter.
 - Hand-guided teleoperation and float mode.
@@ -87,10 +91,12 @@ corrected criterion and passed; none is an open failure.
 - A `moveEe` that keeps the tool's orientation moves the tool sideways by swinging shoulder_pan with
   wrist_yaw counter-rotating: about 24 deg of pan for 1 cm on the Metal arm. The tool point stays on
   the line; the elbow does not.
-- Once, while the arm held still, a write to the adapter did not complete within 100 ms. The arm
-  faulted that joint and kept holding; `stop()` and `returnToRest()` then refuse because of the
-  fault, so another program had to bring the arm down. The adapter answered normally afterwards.
-  Not explained.
+- At `4e2844f`, synchronous work of more than 100 ms in the application while the arm was enabled
+  (a bench script's analysis) was reported as "USB write timed out": the timer bounding the write
+  ran before the write's completion was delivered. The arm faulted that joint and kept holding;
+  `stop()` and `returnToRest()` then refuse because of the fault, so another program had to bring
+  the arm down. From `8fe84da` a bound is only taken as expired after pending I/O has been
+  delivered, and the same stall no longer faults. A blocked thread still means late ticks.
 - Measured tool position after `moveEe` is off by the servo's standing error under gravity
   (about 1 deg on the loaded joints: 6 to 9 mm at the Metal tool). The commanded pose is within 1 mm.
 - The Metal wrist_flex joint lags its command by about 175 ms; the other joints by 65 to 100 ms.
