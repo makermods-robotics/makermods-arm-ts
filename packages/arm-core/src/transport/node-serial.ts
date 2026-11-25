@@ -4,7 +4,7 @@
  * "@makermods/arm-core/node", so browser bundles never load `serialport`.
  */
 
-import { type Clock, RealClock } from "../clock.js";
+import { boundAfterIo, type Clock, RealClock } from "../clock.js";
 import { ConnectError } from "../errors.js";
 import type { SerialPortLike } from "./serial.js";
 import { SlcanSerialBackend, type SlcanSerialBackendOptions } from "./slcan-serial.js";
@@ -263,14 +263,9 @@ export class NodeSerialPort implements SerialPortLike {
     done.catch(() => undefined);
     void readable?.cancel().catch(() => undefined);
     void writable?.abort().catch(() => undefined);
-    this.#closing = new Promise<void>((resolve, reject) => {
-      const cancel = this.#clock.timer(this.#closeTimeout, () =>
-        reject(new Error(`closing ${this.path} timed out after ${this.#closeTimeout} s`)));
-      done.then(
-        () => (cancel(), resolve()),
-        (e: unknown) => (cancel(), reject(e)),
-      );
-    });
+    // Checked after pending I/O is delivered: a close that completed during a stall is not late.
+    this.#closing = boundAfterIo(this.#clock, done, this.#closeTimeout,
+      () => new Error(`closing ${this.path} timed out after ${this.#closeTimeout} s`));
     return this.#closing;
   }
 }

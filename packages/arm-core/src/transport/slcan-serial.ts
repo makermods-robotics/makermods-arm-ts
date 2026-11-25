@@ -13,7 +13,7 @@
  * (1.5 ms) after the previous write and the backend asks the control loop for feedback-paced control.
  */
 
-import { type Clock, Mutex, RealClock, Signal } from "../clock.js";
+import { boundAfterIo, type Clock, Mutex, RealClock, Signal } from "../clock.js";
 import { ConnectError, TimeoutError, ValueError } from "../errors.js";
 import { CanBackend } from "./base.js";
 import type { TransportLogger } from "./gs-usb.js";
@@ -329,14 +329,9 @@ export class SlcanSerialBackend extends CanBackend {
     return `C\r${BITRATE_COMMANDS[this.bitrate]}\r${this.autoRetransmit ? "A1" : "A0"}\rO\r`;
   }
 
+  /** `work` bounded by `seconds`, checked only after pending I/O has been delivered (boundAfterIo). */
   #bounded<T>(work: Promise<T>, seconds: number, what: string): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const cancel = this.clock.timer(seconds, () => reject(new BoundExpired(`${what} timed out after ${seconds} s`)));
-      work.then(
-        (v) => (cancel(), resolve(v)),
-        (e) => (cancel(), reject(e)),
-      );
-    });
+    return boundAfterIo(this.clock, work, seconds, () => new BoundExpired(`${what} timed out after ${seconds} s`));
   }
 
   /**

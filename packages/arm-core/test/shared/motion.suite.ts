@@ -3,7 +3,7 @@
 // control loop's timing (loop rate, late ticks, frame spacing).
 import { describe, expect, it } from "vitest";
 import {
-  Arm, type ArmConfig, ArmState, FRAME_SPACING_S, MAX_TICK_PERIODS, REST_PRESS, REST_PRESS_NM, trajectoryIk,
+  Arm, type ArmConfig, ArmState, FRAME_SPACING_S, kinematics, MAX_TICK_PERIODS, REST_PRESS, REST_PRESS_NM, trajectoryIk,
 } from "@makermods/arm-core";
 import { type SimulatedMotors, VirtualClock } from "@makermods/arm-core/testing";
 import * as planner from "../../src/planner.js";
@@ -595,6 +595,52 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         arm["tick"] = tick;
         await teardown(arm);
       }
+    });
+  });
+
+  describe("model setup stays out of the energized window", () => {
+    /** Counts URDF parses (Chain.fromUrdf) while `body` runs. */
+    async function parses(body: () => Promise<void>): Promise<number> {
+      const fromUrdf = kinematics.Chain.fromUrdf;
+      let count = 0;
+      kinematics.Chain.fromUrdf = (...args: Parameters<typeof fromUrdf>) => {
+        count += 1;
+        return fromUrdf(...args);
+      };
+      try {
+        await body();
+      } finally {
+        kinematics.Chain.fromUrdf = fromUrdf;
+      }
+      return count;
+    }
+
+    it("connect() builds the model; enable() and attach() do not parse the URDF again", async () => {
+      const { arm } = simArm();
+      expect(await parses(() => arm.connect())).toBeGreaterThan(0);
+      expect(await parses(() => arm.enable())).toBe(0);
+      try {
+        expect(await parses(() => arm.detach().then(() => undefined))).toBe(0);
+        const again = new Arm(arm.config, arm.backend, { clock: arm.clock, frameSpacing: 0, logger: new RecordingLogger() });
+        again.PARAM_TIMEOUT = 0.005;
+        expect(await parses(() => again.connect())).toBeGreaterThan(0);
+        expect(await parses(() => again.attach())).toBe(0);
+        await teardown(again);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
+    it("a config change that feeds the chain rebuilds it", async () => {
+      const { arm } = simArm();
+      await arm.connect();
+      const before = arm.chain;
+      expect(await parses(async () => void arm.chain)).toBe(0); // cached
+      arm.config.tcpXyz = [0.0, 0.0, 0.05];
+      let rebuilt: kinematics.Chain | null = null;
+      expect(await parses(async () => void (rebuilt = arm.chain))).toBeGreaterThan(0);
+      expect(rebuilt).not.toBe(before);
+      await arm.disconnect();
     });
   });
 

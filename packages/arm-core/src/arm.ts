@@ -7,7 +7,7 @@
  * of the arm's Product.
  */
 
-import { type Clock, Mutex, RealClock, Signal } from "./clock.js";
+import { boundAfterIo, type Clock, Mutex, RealClock, Signal } from "./clock.js";
 import { type ArmConfig, checkGains, degrees, JointConfig, radians } from "./config.js";
 import { macrotask } from "./cooperate.js";
 import {
@@ -300,6 +300,8 @@ export class Arm {
   /** floatMode() until setGains() or a fault. */
   private floating = false;
   #chain: [string, kinematics.Chain] | null = null;
+  /** The URDF text the cached chain was built from. */
+  #chainUrdf: string | null = null;
   private tickCount = 0;
   private running = false;
   private loop: LoopHandle | null = null;
@@ -382,6 +384,7 @@ export class Arm {
       for (const m of this.motors) m.resetCache();
       this.released.clear();
       this.faulted.clear();
+      this.#prepareModel(); // heavy, config-only: before the bus opens, never while frames are in flight
       this.#backend.setRecvCallback(this.#onFrame);
       await this.#backend.open();
       try {
@@ -1745,9 +1748,10 @@ export class Arm {
   /** The arm's kinematic chain from the profile (built on first use). ArmError without a URDF. */
   get chain(): kinematics.Chain {
     const cfg = this.config;
-    const key = JSON.stringify([cfg.urdf ? String(cfg.urdf) : null, cfg.urdfJoints ?? [], cfg.urdfBaseRpy, cfg.tcpXyz, cfg.tcpRpy,
+    // The URDF text is compared by identity (a new text is a new string); the rest is small.
+    const key = JSON.stringify([cfg.urdfJoints ?? [], cfg.urdfBaseRpy, cfg.tcpXyz, cfg.tcpRpy,
       cfg.joints.map((j) => [j.urdfSign, j.urdfOffset])]);
-    if (this.#chain === null || this.#chain[0] !== key) {
+    if (this.#chain === null || this.#chain[0] !== key || this.#chainUrdf !== cfg.urdf) {
       if (!cfg.urdf) throw new ArmError("the profile names no urdf: kinematics (eePose, moveEe) is unavailable");
       let chain: kinematics.Chain | null;
       try {
@@ -1758,8 +1762,27 @@ export class Arm {
       }
       if (!chain) throw new ArmError("the profile names no urdf: kinematics (eePose, moveEe) is unavailable");
       this.#chain = [key, chain];
+      this.#chainUrdf = cfg.urdf;
     }
     return this.#chain[1];
+  }
+
+  /**
+   * The config-only model work, done before any frame is in flight (connect(), before the bus
+   * opens): parse the URDF into the chain and build the float gravity constants, so enable() and
+   * attach() only create per-session state. A config change that feeds them is picked up on the
+   * next use (the chain is rebuilt when the URDF or the chain settings change; the gravity
+   * constants when the chain's mount, masses or signs change). Errors surface where the model is
+   * first needed, as before.
+   */
+  #prepareModel(): void {
+    if (!this.config.urdf) return;
+    try {
+      const chain = this.chain;
+      chain.gravityTorques(new Array<number>(chain.n).fill(0.0));
+    } catch {
+      // reported by enable(), eePose() or moveEe()
+    }
   }
 
   /** Measured tool point: [xyz in m, rpy in rad] in the world frame. */
@@ -2244,25 +2267,9 @@ export class Arm {
    * (TimeoutError; the frame may still go out, so it counts as sent for the point of no return).
    */
   #bounded(send: Promise<void>, what: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const cancel = this.#clock.timer(SEND_TIMEOUT_S, () => {
-        if (settled) return;
-        settled = true;
-        reject(new TimeoutError(`${what}: the write did not complete within ${SEND_TIMEOUT_S} s`));
-      });
-      send.then(() => {
-        if (settled) return;
-        settled = true;
-        cancel();
-        resolve();
-      }, (e: unknown) => {
-        if (settled) return;
-        settled = true;
-        cancel();
-        reject(e);
-      });
-    });
+    // Checked after pending I/O is delivered: a stall does not turn a completed write into a timeout.
+    return boundAfterIo(this.#clock, send, SEND_TIMEOUT_S,
+      () => new TimeoutError(`${what}: the write did not complete within ${SEND_TIMEOUT_S} s`));
   }
 
   #skipped(i: number): boolean {

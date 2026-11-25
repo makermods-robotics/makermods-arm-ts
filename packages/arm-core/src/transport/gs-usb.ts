@@ -14,7 +14,7 @@
  * was acknowledged on the bus. Bit timing at an 87.5 % sample point, prop_seg 1.
  */
 
-import { type Clock, RealClock, Mutex, Signal } from "../clock.js";
+import { boundAfterIo, type Clock, Mutex, RealClock, Signal, yieldToIo } from "../clock.js";
 import { ConnectError, notSubmitted, TimeoutError, ValueError } from "../errors.js";
 import { CanBackend } from "./base.js";
 
@@ -388,16 +388,15 @@ export class GsUsbBackend extends CanBackend {
     return this.#session !== null;
   }
 
-  /** A USB transfer bound in time like the Python SDK's (at least 1 ms). WebUSB cannot cancel the transfer itself. */
+  /**
+   * A USB transfer bound in time like the Python SDK's (at least 1 ms). WebUSB cannot cancel the
+   * transfer itself. The bound is checked only after pending I/O has been delivered (boundAfterIo):
+   * a stalled event loop delays it, it does not turn a completed transfer into a timeout. In Node
+   * the native endpoint timeout is the authoritative bound of a bulk transfer and this a backstop.
+   */
   #bounded<T>(work: Promise<T>, seconds: number, what: string): Promise<T> {
     const ms = Math.max(1, Math.ceil(seconds * 1000));
-    return new Promise<T>((resolve, reject) => {
-      const cancel = this.clock.timer(ms / 1000, () => reject(new BoundExpired(`${what} timed out after ${ms} ms`)));
-      work.then(
-        (v) => (cancel(), resolve(v)),
-        (e) => (cancel(), reject(e)),
-      );
-    });
+    return boundAfterIo(this.clock, work, ms / 1000, () => new BoundExpired(`${what} timed out after ${ms} ms`));
   }
 
   async #control(dev: UsbDeviceLike, request: number, data: Uint8Array<ArrayBuffer>, what: string): Promise<void> {
@@ -493,6 +492,7 @@ export class GsUsbBackend extends CanBackend {
         new Promise<void>((resolve) => (cancel = this.clock.timer(1.0 + this.ioTimeout, resolve))),
       ]);
       cancel();
+      await yieldToIo(this.clock); // completions already pending count before the verdict
     }
     if (unresolved.size) {
       throw new ConnectError(

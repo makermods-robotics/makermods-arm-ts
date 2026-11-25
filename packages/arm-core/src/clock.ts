@@ -8,9 +8,69 @@ export interface Clock {
   sleep(seconds: number): Promise<void>;
   /** Calls `fn` once after `seconds`; the returned function cancels it. */
   timer(seconds: number, fn: () => void): () => void;
+  /**
+   * Resolves once I/O completions that were already pending have been delivered. A timer that
+   * bounds an I/O operation awaits this before it declares the operation late: an event loop that
+   * was blocked runs expired timers before it polls for I/O, so without it a transfer that finished
+   * during the stall would be reported as timed out. Optional; without it nothing is awaited.
+   */
+  yieldToIo?(): Promise<void>;
+}
+
+/** clock.yieldToIo(), or a resolved promise for a clock without it. */
+export function yieldToIo(clock: Clock): Promise<void> {
+  return clock.yieldToIo ? clock.yieldToIo() : Promise.resolve();
+}
+
+/**
+ * `work`, or the rejection `expired()` returns once `seconds` have passed AND pending I/O has been
+ * delivered with `work` still unresolved: an expiry is never taken at face value. The timer is the
+ * JavaScript bound; where the platform bounds the operation itself (a native USB transfer timeout)
+ * that native bound is the authoritative one and this a backstop.
+ */
+export function boundAfterIo<T>(clock: Clock, work: Promise<T>, seconds: number, expired: () => unknown): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cancel = clock.timer(seconds, () => {
+      void yieldToIo(clock).then(() => {
+        if (settled) return;
+        settled = true;
+        reject(expired());
+      });
+    });
+    work.then(
+      (v) => {
+        if (settled) return;
+        settled = true;
+        cancel();
+        resolve(v);
+      },
+      (e: unknown) => {
+        if (settled) return;
+        settled = true;
+        cancel();
+        reject(e);
+      },
+    );
+  });
 }
 
 type Yield = () => Promise<void>;
+
+/**
+ * A turn after pending I/O completions: in Node one setImmediate (the check phase runs after the
+ * poll phase that delivers I/O); in a browser two MessageChannel round trips (a message queued
+ * behind completions already delivered to the task queue, twice for good measure).
+ */
+function makeIoYield(): Yield {
+  const g = globalThis as { setImmediate?: unknown };
+  if (typeof g.setImmediate === "function") return makeYield();
+  const once = makeYield();
+  return async () => {
+    await once();
+    await once();
+  };
+}
 
 function makeYield(): Yield {
   const g = globalThis as { setImmediate?: (fn: () => void) => unknown; MessageChannel?: typeof MessageChannel };
@@ -43,6 +103,7 @@ export interface RealClockOptions {
 export class RealClock implements Clock {
   readonly spinMs: number;
   #yield: Yield = makeYield();
+  #ioYield: Yield = makeIoYield();
 
   constructor(options: RealClockOptions = {}) {
     this.spinMs = options.spinMs ?? 1.5;
@@ -55,6 +116,11 @@ export class RealClock implements Clock {
   timer(seconds: number, fn: () => void): () => void {
     const handle = setTimeout(fn, Math.max(0, seconds * 1000));
     return () => clearTimeout(handle);
+  }
+
+  /** In Node one setImmediate (after the poll phase); in a browser two message round trips. */
+  yieldToIo(): Promise<void> {
+    return this.#ioYield();
   }
 
   /** Always gives the event loop at least one turn, sleep(0) included, so received frames are handled. */
@@ -96,7 +162,12 @@ export class Signal {
         if (predicate()) done(true);
       };
       this.#waiters.add(check);
-      cancel = clock.timer(timeout, () => done(predicate()));
+      // On expiry the predicate is checked again after pending I/O is delivered: a reply already
+      // queued when a stall ends is not reported as missing.
+      cancel = clock.timer(timeout, () => {
+        if (predicate()) done(true);
+        else void yieldToIo(clock).then(() => done(predicate()));
+      });
     });
   }
 }

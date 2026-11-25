@@ -65,6 +65,11 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
   motor's own error. The Python SDK could get the same option once it has been run on an arm.
 - Frame spacing: Python busy-waits `FRAME_SPACING_S` start to start; TypeScript sleeps the same gap
   on its clock (a RealClock spins the last stretch of a short sleep).
+- Timeouts and the event loop: a JavaScript timer that bounds an I/O operation (a USB or serial
+  write, a control transfer, a reply wait through `Signal.wait`) is checked only after pending I/O
+  has been delivered (`Clock.yieldToIo`, `boundAfterIo`): a stalled event loop delays frames but
+  does not turn a transfer that completed, or a reply that arrived, during the stall into a timeout.
+  Python bounds these in C (libusb, pyserial), where a GIL or GC stall cannot expire them early.
 - gs_usb write deadline: Python bounds a USB write only by the native endpoint timeout. In Node the
   TypeScript transport does the same (the `usb` package's endpoint timeout, ioTimeout), with a
   JavaScript backstop NATIVE_BACKSTOP_S later that cannot fire before the native timeout can report,

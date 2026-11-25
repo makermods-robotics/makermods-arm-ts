@@ -10,7 +10,7 @@
  * is unlock (unloaded), and nothing here can energize anything.
  */
 
-import { type Clock, Mutex, RealClock, Signal } from "../clock.js";
+import { type Clock, Mutex, RealClock, Signal, yieldToIo } from "../clock.js";
 import { ArmError } from "../errors.js";
 import type { SerialPortLike } from "../transport/serial.js";
 
@@ -336,7 +336,14 @@ export class FashionStarBus {
       await Promise.race([
         writing,
         new Promise<never>((_, reject) => {
-          cancelTimer = this.clock.timer(WRITE_TIMEOUT, () => reject(new ServoBusError("serial write timeout")));
+          // Checked after pending I/O is delivered: a write that completed during a stall is not late.
+          let written = false;
+          void writing.then(() => (written = true), () => undefined);
+          cancelTimer = this.clock.timer(WRITE_TIMEOUT, () => {
+            void yieldToIo(this.clock).then(() => {
+              if (!written) reject(new ServoBusError("serial write timeout"));
+            });
+          });
           const stop = (): void => reject(new ServoBusError(this.#closed !== null ? "the port is closed" : "aborted"));
           this.#closing.signal.addEventListener("abort", stop, { once: true });
           signal?.addEventListener("abort", stop, { once: true });

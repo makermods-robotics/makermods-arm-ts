@@ -42,10 +42,11 @@ or when its `signal` is aborted (`stop({ signal })`), it resolves false with the
 profile's gains. A release some motor did not confirm resolves false with the arm CONNECTED and
 those motors in `arm.unconfirmedDisable`.
 
-The control loop runs on the thread the arm was created on. Keep long synchronous work off that
-thread (use the `...Async` IK solves, or run the arm in a Web Worker): while it runs no frames go
-out and the motors hold their last command; the next tick moves the commands by the time that
-passed, at most four periods. `arm.loopRateHz` (also in `status()`) shows the rate the loop keeps,
+The control loop runs on the thread the arm was created on. An application must not block that
+thread's event loop while an arm is enabled (use the `...Async` IK solves, or run the arm in a Web
+Worker): while it is blocked no frames go out and the motors hold their last command; the next tick
+is late and moves the commands by the time that passed, at most four periods. That is not a fault
+by itself, and a write or reply that completed during the stall is not taken for a timeout. `arm.loopRateHz` (also in `status()`) shows the rate the loop keeps,
 and a warning is logged once per session when it stays below 90 % of the profile's rate.
 
 ## In Node

@@ -68,6 +68,15 @@ export class VirtualClock implements Clock {
     return new Promise<void>((resolve) => this.timer(seconds, resolve));
   }
 
+  /**
+   * One microtask: in virtual time every simulated completion due before a timer has already been
+   * delivered when it fires (timers fire in deadline order, each after everything the previous one
+   * woke), so nothing else is pending, and no timer may fire in between (tests stay deterministic).
+   */
+  yieldToIo(): Promise<void> {
+    return Promise.resolve();
+  }
+
   /** Timers still waiting. */
   get pending(): number {
     return this.#timers.length;

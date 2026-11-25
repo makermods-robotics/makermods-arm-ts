@@ -1,4 +1,4 @@
-export { type Clock, Mutex, RealClock, type RealClockOptions, Signal } from "./clock.js";
+export { boundAfterIo, type Clock, Mutex, RealClock, type RealClockOptions, Signal, yieldToIo } from "./clock.js";
 export {
   ArmConfig, type ArmConfigInit, checkGains, degrees, JointConfig, type JointConfigInit, radians, type RawProfile,
 } from "./config.js";
