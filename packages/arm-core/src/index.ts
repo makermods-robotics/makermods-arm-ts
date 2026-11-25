@@ -9,7 +9,7 @@ export { CanBackend, type RecvCallback } from "./transport/base.js";
 export { MockBackend, type Responder } from "./transport/mock.js";
 export {
   Arm, type ArmOptions, type ArmStatus, EE_ANGLE_TOL, EE_MIN_SECONDS, EE_POSITION_TOL, type EnableOptions, type ExtraTorque,
-  FRAME_SPACING, FRAME_SPACING_S, HEIGHT_JOINT_M_PER_RAD, type JointStatus, type Logger, LOOP_RATE_WINDOW_S, MAX_TICK_PERIODS,
+  ATTACH_LOAD_MIN_NM, FRAME_SPACING, FRAME_SPACING_S, HEIGHT_JOINT_M_PER_RAD, type JointStatus, type Logger, LOOP_RATE_WINDOW_S, MAX_TICK_PERIODS,
   type MoveEeOptions, type MoveOptions, REST_FRESH_S, REST_PRESS, REST_PRESS_NM, REST_RECHECK, type SetMotorIdOptions, SLOW_LOOP_SHARE, type StopOptions,
 } from "./arm.js";
 export {
@@ -25,7 +25,7 @@ export {
 } from "./kinematics.js";
 export {
   extendPoses, IKStream, IKWeights, type IKResult as TrajectoryIKResult, poseResidual, savgol, seamBlend, smoothPoses, so3Exp,
-  so3Log, solvePath, solvePathAsync, type SolveOptions, straightLine, toolErrors, TrajectoryIK, type TrajectoryIKOptions,
+  so3Log, solvePath, solvePathAsync, type SolveOptions, straightLine, straightLineAsync, toolErrors, TrajectoryIK, type TrajectoryIKOptions,
 } from "./trajectory-ik.js";
 export { type CooperativeOptions, macrotask } from "./cooperate.js";
 export { GravityFeedforward, type GravityFeedforwardOptions } from "./gravity.js";

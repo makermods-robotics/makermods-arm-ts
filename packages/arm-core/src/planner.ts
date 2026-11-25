@@ -67,7 +67,9 @@ export class Budget {
     this.allowed = this.started + PLAN_START_S;
   }
 
+  /** The path has `n` ticks: its allowance replaces the current one, after checking it has not run out. */
   ticks(n: number): void {
+    this.check();
     this.allowed = this.#clock.now() + PLAN_MARGIN_S + n * PLAN_S_PER_TICK;
   }
 
@@ -150,7 +152,9 @@ export async function planEe(chain: kinematics.Chain, ik: trajectoryIk.Trajector
           + `${(MAX_PATH_TICKS / rate).toFixed(0)} s planned at most: split the move or raise the speed`,
       };
     }
-    const poses = [...trajectoryIk.straightLine(start, goal, ticks)];
+    // The current allowance is checked before the path's own replaces it (in progress()).
+    if (check !== null) check();
+    const poses = await trajectoryIk.straightLineAsync(start, goal, ticks, { pause });
     for (let k = 0; k < hold; k++) poses.push(goal.map((row) => [...row]));
     if (progress !== null) progress(poses.length);
     plan = await trajectoryIk.solvePathAsync(ik, poses, q, rate, { speedCap: speed, pause, between: check });

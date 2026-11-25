@@ -218,15 +218,52 @@ async function windDown(arm: Arm, signal: AbortSignal): Promise<string> {
     console.error(`return to rest failed: ${e instanceof Error ? e.message : e}`);
   }
   if (verified) {
-    if (arm.unconfirmedDisable.length) {
-      console.error(`rest pose reached, but torque off was not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; cut motor power if they hold`);
-      return "unconfirmed";
-    }
     console.log("rest pose reached; torque released");
     return "rest";
   }
+  if ((arm.state as ArmState) === ArmState.CONNECTED && arm.unconfirmedDisable.length) {
+    // stop() sent the release but some motor did not confirm it: never reported as a release.
+    console.error(`rest pose reached, but torque off was not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; cut motor power if they hold`);
+    return "unconfirmed";
+  }
   console.error("could not verify the return to rest; the arm is holding its pose");
   return leaveHolding(arm);
+}
+
+/**
+ * Keep this process servicing the arm until it is safe to exit: an energized arm stays held (and
+ * leaveHolding() is tried again) until it has detached or been released; a release some motor did
+ * not confirm is tried again until it is. Never returns while the arm may be holding with nobody
+ * commanding it.
+ */
+async function untilSafe(arm: Arm, then: string): Promise<string> {
+  for (;;) {
+    if (arm.state === ArmState.ENABLED || arm.state === ArmState.FAULT) {
+      try {
+        then = await leaveHolding(arm);
+        continue;
+      } catch (e) {
+        console.error(`could not leave the arm holding cleanly (${e instanceof Error ? e.message : e}); `
+          + "this process keeps holding it and tries again");
+        arm.holdCurrentPosition();
+        await arm.clock.sleep(1.0);
+        continue;
+      }
+    }
+    if (arm.state === ArmState.CONNECTED && arm.unconfirmedDisable.length) {
+      console.error(`torque off still not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; trying again. `
+        + "Cut motor power if they hold");
+      try {
+        await arm.disable();
+      } catch (e) {
+        console.error(`disable failed: ${e instanceof Error ? e.message : e}`);
+      }
+      if (arm.unconfirmedDisable.length) await arm.clock.sleep(2.0);
+      else then = "released";
+      continue;
+    }
+    return then;
+  }
 }
 
 const args = parseArgs(process.argv.slice(2), {
@@ -302,16 +339,9 @@ try {
     console.error(`wind-down failed: ${e instanceof Error ? e.message : e}`);
     then = "failed";
   }
-  if (arm.state === ArmState.ENABLED || arm.state === ArmState.FAULT) {
-    // Still energized after a failed wind-down: leave it holding rather than closing the bus on it.
-    try {
-      then = await leaveHolding(arm);
-    } catch (e) {
-      console.error(`could not leave the arm holding cleanly: ${e instanceof Error ? e.message : e}`);
-    }
-  } else if (arm.state !== ArmState.DISCONNECTED) {
-    await arm.disconnect();
-  }
+  // Still energized after a failed wind-down, or a release not confirmed: keep servicing the arm.
+  then = await untilSafe(arm, then);
+  if (arm.state !== ArmState.DISCONNECTED) await arm.disconnect();
 }
 
 // Everything below runs with the arm at rest or handed over: analysis and files never delay the control loop.

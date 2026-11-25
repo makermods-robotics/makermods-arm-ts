@@ -114,7 +114,7 @@ export function faultText(word: number | null): string {
 }
 
 function checkId(motorId: number): number {
-  if (!(motorId >= 1 && motorId <= 127)) throw new ValueError(`MIT motor ID must be in [1, 127], got ${motorId}`);
+  if (!(Number.isInteger(motorId) && motorId >= 1 && motorId <= 127)) throw new ValueError(`MIT motor ID must be in [1, 127], got ${motorId}`);
   return motorId;
 }
 

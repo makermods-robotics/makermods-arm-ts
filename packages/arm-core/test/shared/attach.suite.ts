@@ -1,7 +1,7 @@
 // Port of the Python SDK's tests/unit/test_attach.py: Arm.attach(), taking over an arm left holding with
 // torque on, on simulated motors.
 import { describe, expect, it } from "vitest";
-import { Arm, type ArmConfig, ArmState, type CanBackend, ConnectError, radians, StateError } from "@makermods/arm-core";
+import { Arm, type ArmConfig, ArmState, type CanBackend, ConnectError, gravity, radians, StateError } from "@makermods/arm-core";
 import { type SimulatedMotors, VirtualClock } from "@makermods/arm-core/testing";
 import { type ArmFakes, type FakeMotorLike, type FakeMotorOptions, RecordingLogger, waitFor } from "./fakes.js";
 
@@ -74,8 +74,11 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
   }
 
   describe("attach gravity at takeover (TypeScript only)", () => {
-    /** Attach `arm` to the arm a previous session left holding; the first frame's torque to shoulder_lift. */
-    async function firstLiftTorque(mode: "full" | "ramp" | undefined, prepare?: (sim: Sim, arm: Arm) => void):
+    /**
+     * Attach to the arm a previous session left holding, its chain motors reporting `carried` times
+     * the model's holding torque; the first frame's torque to shoulder_lift and the full model value.
+     */
+    async function firstLiftTorque(mode: "full" | "ramp" | undefined, carried: number, prepare?: (sim: Sim, arm: Arm) => void):
         Promise<{ tau: number; full: number; arm: Arm }> {
       const clock = new VirtualClock();
       const [sim, backend] = await leftEnergized(clock);
@@ -86,45 +89,66 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         arm = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
         arm.PARAM_TIMEOUT = 0.005;
       }
+      const model = gravity.fromConfig(sim.config, arm.chain)!;
+      const q = sim.positions.slice(0, model.n);
+      const holding = model.model(q).map((t, i) => Math.max(-model.limitsNm[i]!, Math.min(model.limitsNm[i]!, t)));
+      const motors = [...sim.motors.values()] as unknown as Array<{ torque: number }>;
+      holding.forEach((t, i) => (motors[i]!.torque = carried * t * sim.config.joints[i]!.direction));
       await arm.connect(false, true);
       prepare?.(sim, arm);
       const lift = sim.config.joints.findIndex((j) => j.name === "shoulder_lift");
-      const model = arm["gravity"] ?? null;
-      expect(model).toBeNull(); // built by attach()
       clearLogs(sim);
       await arm.attach();
       expect(await waitFor(() => sim.motor("shoulder_lift").frames.length >= 1, clock)).toBe(true);
-      const g = arm["gravity"]!;
-      const q = arm.getJointPositions().slice(0, g.n);
-      const limit = g.limitsNm[lift]!;
-      const full = Math.max(-limit, Math.min(limit, g.model(q)[lift]!)) * sim.config.joints[lift]!.direction;
+      const full = holding[lift]! * sim.config.joints[lift]!.direction;
       return { tau: sim.motor("shoulder_lift").frames[0]![2], full, arm };
     }
 
-    it("keeps full gravity feed-forward when every chain joint reports torque on (default)", async () => {
-      const { tau, full, arm } = await firstLiftTorque(undefined);
+    it("starts near full level when the motors carry the model's holding torque (default)", async () => {
+      const { tau, full, arm } = await firstLiftTorque(undefined, 1.0);
       try {
         expect(Math.abs(full)).toBeGreaterThan(0.5); // a loaded joint
-        expect(Math.abs(tau - full)).toBeLessThan(0.05);
+        expect(Math.abs(tau - full)).toBeLessThan(0.05 * Math.abs(full) + 0.05);
       } finally {
         await arm.disable();
       }
     });
 
-    it("eases gravity in with attachGravity: ramp, as the Python SDK does", async () => {
-      const { tau, full, arm } = await firstLiftTorque("ramp");
+    it("starts in between when the motors carry part of it", async () => {
+      const { tau, full, arm } = await firstLiftTorque(undefined, 0.5);
+      try {
+        expect(Math.abs(tau - 0.5 * full)).toBeLessThan(0.1 * Math.abs(full));
+      } finally {
+        await arm.disable();
+      }
+    });
+
+    for (const [what, carried] of [["an energized arm lying on its support with no torque", 0.0], ["a wrong-sign torque", -1.0]] as const) {
+      it(`starts from zero for ${what}`, async () => {
+        const { tau, full, arm } = await firstLiftTorque(undefined, carried);
+        try {
+          expect(Math.abs(full)).toBeGreaterThan(0.5);
+          expect(Math.abs(tau)).toBeLessThan(0.1); // level 0 (one torque step of rounding)
+        } finally {
+          await arm.disable();
+        }
+      });
+    }
+
+    it("eases gravity in from zero with attachGravity: ramp, as the Python SDK does", async () => {
+      const { tau, full, arm } = await firstLiftTorque("ramp", 1.0);
       try {
         expect(Math.abs(full)).toBeGreaterThan(0.5);
-        expect(Math.abs(tau)).toBeLessThan(0.1); // level 0 (one torque step of rounding)
+        expect(Math.abs(tau)).toBeLessThan(0.1);
       } finally {
         await arm.disable();
       }
     });
 
-    it("keeps the ease-in when a chain joint reports torque off or no torque state", async () => {
+    it("starts from zero when a chain joint reports torque off or no torque state", async () => {
       for (const state of ["off", "unknown"] as const) {
         let applies = true;
-        const { tau, full, arm } = await firstLiftTorque(undefined, (sim, a) => {
+        const { tau, full, arm } = await firstLiftTorque(undefined, 1.0, (sim, a) => {
           const i = sim.config.joints.findIndex((j) => j.name === "elbow_flex");
           if (state === "off") {
             sim.motor("elbow_flex").enabled = false; // lying on its support, say

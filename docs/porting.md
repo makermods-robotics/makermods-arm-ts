@@ -46,16 +46,68 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
   event loop with everything else on its thread.
 - A second Ctrl-C during `stop()` (a `KeyboardInterrupt` raised inside it) is `stop({ signal })`:
   aborting the signal ends the return to rest, or the recheck before the release, and `stop()`
-  resolves false with the arm holding at full gains, as the Python `stop()` leaves it before the
-  interrupt propagates.
+  resolves false with the arm holding, as the Python `stop()` leaves it before the interrupt
+  propagates. Every wait in stop() (the two-tick wait, the ramp and settle sleeps, the loop join,
+  the reply waits) wakes on the abort, as a SIGINT ends a Python sleep; the frame generator models
+  the Ctrl-C that way (`stop_interrupted` scenarios).
 - `attach()` gravity: the Python SDK eases the new session's gravity feed-forward in from zero over
   `RAMP_S`, so a loaded joint the previous owner was holding dips for half a second at takeover
-  (about 3.5 deg on a Metal elbow). With `ArmOptions.attachGravity: "full"` (the default) the
-  feed-forward starts at full level when every joint of the gravity chain reports torque on; it is
-  still eased in when any of them reports torque off or no torque state. `"ramp"` is the Python
-  behaviour (the frame replay uses it). The Python SDK should get the same change.
+  (about 3.5 deg on a Metal elbow). With `ArmOptions.attachGravity: "full"` (the default) the ease-in
+  starts at the share of the model's holding torque the motors carry, from their fresh feedback
+  torques (joint sign): clamp(dot(measured, model) / dot(model, model), 0, 1), and from zero when any
+  chain joint reports torque off or no torque state, or the model torque is under
+  `ATTACH_LOAD_MIN_NM`. Both families report an estimated output torque (from motor current) in
+  N·m and motor sign, 12 bits over the model's torque range (RobStride tMin..tMax, Damiao ±T_MAX: a
+  step of a few thousandths to a few hundredths of a N·m by model); the arm applies the joint
+  direction. The estimate includes friction and the motor's own error, so the share is approximate. `"ramp"` is the Python behaviour (the frame replay uses it).
+  The Python SDK should get the same change.
 - Frame spacing: Python busy-waits `FRAME_SPACING_S` start to start; TypeScript sleeps the same gap
   on its clock (a RealClock spins the last stretch of a short sleep).
+- stop(): a weight-carrying joint left out of the return is read again with the returned joints right
+  before the release; missing, stale or raised (beyond restSettle from the supported pose) refuses
+  it (stricter than Python def3243).
+- stop(): the reading the recheck counts answers a command sent after the control loop stopped:
+  replies are counted against the session's commands (a Damiao refresh is answered with a state
+  frame and counted as a command); the loop's replies drain first (up to REPLY_TIMEOUT), and a motor
+  still owing one (lost, or held back until the next frame) is read once more before the recheck,
+  so a buffered reply up to one frame late cannot pass for the recheck's. A deeper buffer is not
+  covered (stricter than Python def3243).
+- stop(): motor faults and the arm state are judged again after the recheck's waits, right before
+  the release (stricter than Python def3243).
+- stop(): the recheck reading must be younger than min(feedbackTimeout, REST_FRESH_S) (stricter than
+  Python def3243).
+- stop(): resolves true only when every motor confirmed torque off; otherwise false with the arm
+  CONNECTED, the loop stopped, the motors in `unconfirmedDisable` and `status().unconfirmedDisable`,
+  and disable() tries again (stricter than Python def3243, whose stop() reports True).
+- stop(): every exit that does not release holds the measured pose at the profile's gains, ending
+  float mode, setGains() gains and the extra torque first (stricter than Python def3243).
+- estop(): enable() and attach() refuse while an e-stop's confirmed shutdown is in progress; stop()'s
+  recheck tick and every command frame after a spacing wait check the session, and stop()'s cleanup
+  sends nothing while an e-stop is pending (stricter than Python def3243). The read-only status
+  query after a spacing wait still goes out, as in Python (the frame replay records one after an
+  e-stop).
+- stop(): the point of no return is the first torque-off frame: an abort before it holds, after it
+  the release finishes and its outcome is reported (stricter than Python def3243, where an interrupt
+  during the release leaves some motors off and the rest holding).
+- A hold, fault or shutdown that supersedes a tick's commands during a spacing wait (or a slow
+  send) replaces the frames not yet sent with the held command (stricter than Python def3243, which
+  sends the stale frame; the frame replay keeps Python's frames through a private `pythonFrames`
+  switch, used by no other code).
+- moveEe(): a cancel during the last row's period, or before the arrival wait, holds the measured
+  pose (stricter than Python def3243, which leaves the last row as the target).
+- moveEe() planning: an expired allowance is checked before the path's own replaces it, and the
+  straight-line poses are built cooperatively (`straightLineAsync`, a pause every 256 rows)
+  (stricter than Python def3243).
+- setMotorId(): ids must be whole numbers at the arm, motor and protocol boundaries, before the bus
+  is opened (stricter than Python def3243). After the id change both routes are probed before the
+  joint is routed to the new id; something answering at the old id is RouteUnverified and blocks
+  enable()/attach() for both products (Python def3243 checks this only for RobStride).
+- The rest press never moves a joint enabled outside its soft limits (inside fullTurnGrace), so
+  the clamp to the limits cannot exceed REST_PRESS / REST_PRESS_NM (stricter than Python def3243).
+- The slow-loop warning goes out once per session, also after a recovery; a loop restarted by
+  stop() starts a new loop-rate window (stricter than Python def3243).
+- url: cameras: MAX_HEADERS counts physical header lines, so a part repeating one header name is bounded too (stricter than Python def3243).
+- url: cameras: a JPEG without EOI at its end (a truncated part or response) is skipped and counted in `HttpCapture.incomplete`, never published as a frame (stricter than Python def3243).
 
 ## Bytes and numbers
 

@@ -223,7 +223,7 @@ export function unpackValue(raw: Uint8Array, dtype: string): number {
 }
 
 function checkId(motorId: number): number {
-  if (!(ID_MIN <= motorId && motorId <= ID_MAX)) {
+  if (!(Number.isInteger(motorId) && ID_MIN <= motorId && motorId <= ID_MAX)) {
     throw new ValueError(`Damiao motor id must be in [${ID_MIN}, ${ID_MAX}], got ${motorId}`);
   }
   return motorId;

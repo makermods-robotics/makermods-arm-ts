@@ -275,6 +275,9 @@ export class Motor implements CoreMotor {
     await this.#send(protocol.encodeMit(this.motorId, pos, vel, kp, kd, tau, this.scaling));
   }
 
+  /** The refresh pollStatus() sends is answered with a state frame. */
+  readonly pollAnsweredByFeedback = true;
+
   /** Send the read-only refresh; its state frame updates status (as every MIT reply does). */
   async pollStatus(): Promise<void> {
     await this.#send(protocol.encodeRefresh(this.motorId));
@@ -615,7 +618,9 @@ export class Motor implements CoreMotor {
    */
   async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false): Promise<void> {
     const [lo, hi] = ID_RANGE;
-    if (!(lo <= newId && newId <= hi)) throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`);
+    if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
+      throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
+    }
     if (newId === this.motorId) return;
     const oldId = this.motorId;
     const oldReply = this.replyId;

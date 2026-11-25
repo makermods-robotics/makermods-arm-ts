@@ -351,7 +351,9 @@ export class RobStrideMotor implements Motor {
    */
   async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false): Promise<void> {
     const [lo, hi] = ID_RANGE;
-    if (!(lo <= newId && newId <= hi)) throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`);
+    if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
+      throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
+    }
     if (newId === this.motorId) return;
     const label = this.joint.label, oldId = this.motorId;
     const step = Math.min(timeout, 0.12);

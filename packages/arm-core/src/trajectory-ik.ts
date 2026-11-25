@@ -981,20 +981,43 @@ const powi = (x: number, k: number): number => Math.pow(x, k);
  */
 export function straightLine(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
                              ease = true): number[][][] {
+  const row = straightLineRows(start, goal, ticks, ease);
+  return Array.from({ length: ticks }, (_, i) => row(i));
+}
+
+/** Rows (ticks per pause) straightLineAsync builds between pauses: a few milliseconds of work. */
+export const STRAIGHT_LINE_ROWS_PER_PAUSE = 256;
+
+/**
+ * `straightLine` without blocking the event loop: the same rows, with `pause()` every
+ * STRAIGHT_LINE_ROWS_PER_PAUSE rows (default a macrotask).
+ */
+export async function straightLineAsync(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
+                                        options: { ease?: boolean; pause?: () => Promise<void> } = {}): Promise<number[][][]> {
+  const row = straightLineRows(start, goal, ticks, options.ease ?? true);
+  const pause = options.pause ?? macrotask;
+  const out: number[][][] = [];
+  for (let i = 0; i < ticks; i++) {
+    if (i > 0 && i % STRAIGHT_LINE_ROWS_PER_PAUSE === 0) await pause();
+    out.push(row(i));
+  }
+  return out;
+}
+
+function straightLineRows(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
+                          ease: boolean): (i: number) => number[][] {
   if (ticks < 1) throw new ValueError("ticks must be >= 1");
-  const s = Array.from({ length: ticks }, (_, i) => {
-    const u = (i + 1) / ticks;
-    return ease ? (10 * powi(u, 3) - 15 * powi(u, 4)) + 6 * powi(u, 5) : u;
-  });
   const s0 = rows3(start);
   const g0 = rows3(goal);
   const turn = log3(mulTA(s0, 0, g0, 0));
   const dp = [0, 1, 2].map((i) => goal[i]![3]! - start[i]![3]!);
-  return s.map((si) => {
+  return (i: number) => {
+    const u = (i + 1) / ticks;
+    const si = ease ? (10 * powi(u, 3) - 15 * powi(u, 4)) + 6 * powi(u, 5) : u;
     const rot = mat3Mul(s0, exp3(si * turn[0], si * turn[1], si * turn[2]));
-    return [0, 1, 2].map((i) => [rot[3 * i]!, rot[3 * i + 1]!, rot[3 * i + 2]!, start[i]![3]! + si * dp[i]!])
+    return [0, 1, 2].map((r) => [rot[3 * r]!, rot[3 * r + 1]!, rot[3 * r + 2]!, start[r]![3]! + si * dp[r]!])
       .concat([[0, 0, 0, 1]]);
-  });
+  };
 }
 
 // ── pose pre-processing ──

@@ -37,6 +37,8 @@ interface ServerOptions {
   partHeaders?: string;
   /** Bytes of padding in every picture (to pass MAX_FRAME_BYTES). */
   pad?: number;
+  /** Cut the end (EOI and the byte before it) off every odd-numbered picture. */
+  truncate?: boolean;
 }
 
 /**
@@ -44,7 +46,8 @@ interface ServerOptions {
  * each picture's gray level is its number mod 250), /nolength.mjpg (parts without Content-Length),
  * /latest.jpg, /text, /manyheaders.mjpg, /stall.mjpg (headers, then nothing), and two streams whose
  * first part header never ends: /trickle.mjpg (a byte every 50 ms) and /longline.mjpg (100 kB, then a
- * byte every 50 ms). `dropAfter` ends each stream after that many frames. Port 9 refuses connections.
+ * byte every 50 ms). /repeatheaders.mjpg repeats one header name past MAX_HEADERS. `dropAfter` ends each
+ * stream after that many frames; `truncate` cuts the end off every odd picture. Port 9 refuses connections.
  */
 class FakeServer {
   readonly base = "http://127.0.0.1:8090";
@@ -56,12 +59,20 @@ class FakeServer {
   readonly dropAfter: number | null;
   readonly partHeaders: string;
   readonly pad: number;
+  readonly truncate: boolean;
 
   constructor(readonly clock: VirtualClock, options: ServerOptions = {}) {
     this.fps = options.fps ?? 100.0;
     this.dropAfter = options.dropAfter ?? null;
     this.partHeaders = options.partHeaders ?? "";
     this.pad = options.pad ?? 0;
+    this.truncate = options.truncate ?? false;
+  }
+
+  /** The n-th picture, its end cut off when `truncate` and n is odd. */
+  #picture(n: number): Uint8Array {
+    const data = jpeg(n, this.pad);
+    return this.truncate && n % 2 === 1 ? data.subarray(0, -3) : data;
   }
 
   readonly fetch: FetchLike = async (url, init) => {
@@ -71,7 +82,7 @@ class FakeServer {
     const headers = (h: Record<string, string>) => ({ get: (name: string) => h[name.toLowerCase()] ?? null });
     if (path === "/latest.jpg") {
       this.sent += 1;
-      const data = jpeg(this.sent, this.pad);
+      const data = this.#picture(this.sent);
       return { status: 200, headers: headers({ "content-type": "image/jpeg" }), body: this.#body(init.signal, [data]) };
     }
     if (path === "/text") {
@@ -88,6 +99,10 @@ class FakeServer {
       const head = Array.from({ length: MAX_HEADERS + 1 }, (_, i) => `X-H${i}: ${i}\r\n`).join("");
       return { status: 200, headers: multipart, body: this.#body(init.signal, [enc(`--frame\r\n${head}\r\n`)], false) };
     }
+    if (path === "/repeatheaders.mjpg") {
+      const head = Array.from({ length: MAX_HEADERS + 1 }, (_, i) => `X-H: ${i}\r\n`).join("");
+      return { status: 200, headers: multipart, body: this.#body(init.signal, [enc(`--frame\r\n${head}\r\n`)], false) };
+    }
     if (path === "/stall.mjpg") {
       return { status: 200, headers: multipart, body: this.#body(init.signal, [enc("--frame\r\n")], false) };
     }
@@ -97,7 +112,7 @@ class FakeServer {
       body: this.#paced(init.signal, 1.0 / this.fps, (k) => {
         if (this.dropAfter !== null && k >= this.dropAfter) return null;
         this.sent += 1;
-        const data = jpeg(this.sent, this.pad);
+        const data = this.#picture(this.sent);
         let head = `--frame\r\nContent-Type: image/jpeg\r\n${this.partHeaders}`;
         if (withLength) head += `Content-Length: ${data.length}\r\n`;
         return concat(enc(`${head}\r\n`), data, enc("\r\n"));
@@ -340,6 +355,47 @@ describe("url: cameras", () => {
     expect(await waitFor(() => !c.alive)).toBe(true);
     expect(c.error).toContain(`more than ${MAX_HEADERS} header lines`);
     c.release();
+  });
+
+  it("a part repeating one header name past the limit stops the capture", async () => {
+    const { capture, waitFor } = setup();
+    const c = await capture("/repeatheaders.mjpg");
+    expect(await waitFor(() => !c.alive)).toBe(true);
+    expect(c.error).toContain(`more than ${MAX_HEADERS} header lines`);
+    c.release();
+  });
+
+  it.each(["/stream.mjpg", "/nolength.mjpg", "/latest.jpg"])("an incomplete JPEG is dropped, not published (%s)", async (path) => {
+    const { capture, waitFor } = setup({ fps: 50.0, truncate: true });
+    const c = await capture(path);
+    try {
+      expect(await waitFor(() => c.incomplete >= 3 && c.received >= 3)).toBe(true);
+      for (let i = 0; i < 4; i++) {
+        const bytes = await c.read(1.0);
+        expect(bytes).not.toBeNull();
+        expect(gray(bytes) % 2).toBe(0); // only the complete (even) pictures
+        expect(bytes![bytes!.length - 2] === 0xff && bytes![bytes!.length - 1] === 0xd9).toBe(true);
+      }
+      expect(c.alive).toBe(true); // a bad frame is skipped; the stream goes on
+      expect(c.error).toBeNull();
+    } finally {
+      c.release();
+    }
+  });
+
+  it("a url: camera never shows an incomplete JPEG", async () => {
+    const { camera } = setup({ fps: 50.0, truncate: true });
+    const cam = camera("/stream.mjpg");
+    await cam.open();
+    try {
+      for (let i = 0; i < 5; i++) {
+        const f = await cam.read(1.0);
+        expect(gray(f.jpeg) % 2).toBe(0);
+        f.close();
+      }
+    } finally {
+      await cam.close();
+    }
   });
 
   it("a server that stops sending times out", async () => {

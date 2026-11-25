@@ -25,7 +25,8 @@
  * mjpg-streamer or an IP camera), or a single JPEG URL fetched again at most `fps` times a second.
  * It works in a page, a worker and Node (anywhere with `fetch` and web streams; a browser needs the
  * server to allow the page's origin). Header lines, header counts and frames are bounded
- * (MAX_LINE_BYTES, MAX_HEADERS, MAX_FRAME_BYTES): a stream past a bound fails and is reopened. Only
+ * (MAX_LINE_BYTES, MAX_HEADERS, MAX_FRAME_BYTES): a stream past a bound fails and is reopened. A
+ * JPEG without EOI at its end (a truncated part) is skipped and counted (HttpCapture.incomplete). Only
  * the newest JPEG is kept, so a slow reader gets the latest picture rather than a backlog; frames
  * are stamped when they arrive (less the server's `X-Frame-Age-Ms` part header when it sends one)
  * and keep the bytes as served (`Frame.jpeg`). A JPEG is decoded with createImageBitmap into a
@@ -349,6 +350,13 @@ function asciiLower(text: string): string {
 
 const isJpeg = (b: Uint8Array): boolean => b.length >= 2 && b[0] === 0xff && b[1] === 0xd8;
 
+/** A whole JPEG: SOI first and EOI last (CR, LF and NUL padding after it allowed), not a truncated one. */
+function isCompleteJpeg(b: Uint8Array): boolean {
+  let end = b.length;
+  while (end > 4 && (b[end - 1] === 0x0d || b[end - 1] === LF || b[end - 1] === 0x00)) end -= 1;
+  return end >= 4 && isJpeg(b) && b[end - 2] === 0xff && b[end - 1] === 0xd9;
+}
+
 /** The media type of a response (`multipart/x-mixed-replace`, `image/jpeg`; text/plain when unnamed), lower case. */
 function contentType(headers: FetchResponseLike["headers"]): string {
   const kind = asciiLower((headers.get("content-type") ?? "").split(";", 1)[0]!.trim());
@@ -454,6 +462,8 @@ export class HttpCapture {
   received = 0;
   /** JPEGs replaced by a newer one before read() took them. */
   dropped = 0;
+  /** JPEGs skipped because they were incomplete (no EOI at the end): never given by read(). */
+  incomplete = 0;
   /** [wall-clock s, Clock s] arrival of the JPEG read() returned last (less the server's X-Frame-Age-Ms). */
   lastTimes: [number, number] | null = null;
 
@@ -546,6 +556,13 @@ export class HttpCapture {
     });
   }
 
+  /** Publishes a JPEG as the newest frame; bytes that are not a JPEG are ignored, an incomplete one is counted. */
+  #offer(jpeg: Uint8Array, ageHeader: string | null | undefined): void {
+    if (!isJpeg(jpeg)) return;
+    if (isCompleteJpeg(jpeg)) this.#store(jpeg, ageHeader);
+    else this.incomplete += 1;
+  }
+
   #store(jpeg: Uint8Array, ageHeader: string | null | undefined): void {
     const now = this.#clock.now();
     const wall = this.#wall();
@@ -597,12 +614,13 @@ export class HttpCapture {
       const boundary = stripBytes(line); // a closing boundary ("--frame--") is followed by the end of the stream
       const closing = Uint8Array.from([...boundary, DASH, DASH]);
       const headers = new Map<string, string>();
+      let lines = 0; // physical header lines: a repeated name counts each time
       for (;;) {
         let h = await this.#line(bytes);
         if (!h.length) throw new Error("the stream ended inside a part");
         h = stripBytes(h);
         if (!h.length) break;
-        if (headers.size >= MAX_HEADERS) throw new ValueError(`a part with more than ${MAX_HEADERS} header lines`);
+        if (lines++ >= MAX_HEADERS) throw new ValueError(`a part with more than ${MAX_HEADERS} header lines`);
         const colon = h.indexOf(0x3a);
         const name = colon < 0 ? h : h.subarray(0, colon);
         const value = colon < 0 ? new Uint8Array(0) : h.subarray(colon + 1);
@@ -633,7 +651,7 @@ export class HttpCapture {
         jpeg = concatBytes(chunks, size);
         if (jpeg.length >= 2 && jpeg[jpeg.length - 2] === 0x0d && jpeg[jpeg.length - 1] === LF) jpeg = jpeg.subarray(0, -2);
       }
-      if (isJpeg(jpeg)) this.#store(jpeg, headers.get("x-frame-age-ms"));
+      this.#offer(jpeg, headers.get("x-frame-age-ms"));
     }
   }
 
@@ -645,7 +663,7 @@ export class HttpCapture {
       const jpeg = await this.#bytes(response).read(MAX_FRAME_BYTES + 1);
       this.#reader?.cancel().catch(() => undefined);
       if (jpeg.length > MAX_FRAME_BYTES) throw new ValueError(`a frame larger than ${MAX_FRAME_BYTES} bytes`);
-      if (isJpeg(jpeg)) this.#store(jpeg, response.headers.get("x-frame-age-ms"));
+      this.#offer(jpeg, response.headers.get("x-frame-age-ms"));
       const wait = this.pollPeriod - (this.#clock.now() - started);
       if (wait > 0) await this.#clock.sleep(wait);
       if (this.#closed) return;

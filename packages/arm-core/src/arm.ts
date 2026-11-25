@@ -57,6 +57,8 @@ export const HEIGHT_JOINT_M_PER_RAD = 0.02;
 export const FRAME_SPACING_S = 200e-6;
 /** The default frame spacing (ArmOptions.frameSpacing), s: FRAME_SPACING_S. */
 export const FRAME_SPACING = FRAME_SPACING_S;
+/** attach(): below this model holding torque (N·m, over the chain) gravity starts from zero. */
+export const ATTACH_LOAD_MIN_NM = 0.1;
 /** loopRateHz is measured over this window, s. */
 export const LOOP_RATE_WINDOW_S = 1.0;
 /** Below this share of controlRateHz for two windows: warn once per session. */
@@ -75,10 +77,11 @@ export interface ArmOptions {
   /** Start-to-start spacing of the frames of a tick, s (default FRAME_SPACING_S; 0 for simulated motors). */
   frameSpacing?: number;
   /**
-   * How attach() starts gravity feed-forward. "full" (default): at full level when every joint of
-   * the gravity chain reports torque on, so a joint the previous owner was holding keeps its
-   * feed-forward at takeover; still eased in when any chain joint reports torque off or does not
-   * report torque state. "ramp": always eased in over gravity.RAMP_S, as the Python SDK does.
+   * How attach() starts gravity feed-forward. "full" (default): at the share of the model's
+   * holding torque the motors are carrying (from their feedback torques), so a joint the previous
+   * owner was holding keeps its feed-forward at takeover, then eased in from there; from zero when
+   * any chain joint reports torque off or no torque state. "ramp": always eased in from zero over
+   * gravity.RAMP_S, as the Python SDK does.
    */
   attachGravity?: "full" | "ramp";
 }
@@ -145,6 +148,8 @@ export interface ArmStatus {
   faultReason: string | null;
   /** Measured control-loop rate, Hz (one decimal), null until measured. Always set by Arm.status(). */
   loopRateHz?: number | null;
+  /** Motors whose torque release could not be confirmed (Arm.unconfirmedDisable). Always set by Arm.status(). */
+  unconfirmedDisable?: number[];
   joints: Record<string, JointStatus>;
 }
 
@@ -238,6 +243,23 @@ export class Arm {
   private slowWindows = 0;
   /** How moveEe's planning gives the event loop a turn. */
   private planPause: () => Promise<void> = macrotask;
+  /**
+   * Frame replay only: send a frame computed before a hold even when the hold superseded it, as
+   * the Python SDK does (see "Intended differences" in docs/porting.md).
+   */
+  private pythonFrames = false;
+  /** moveEe's planner (replaceable in tests). */
+  private planFn: typeof planner.plan = planner.plan;
+  /** E-stops whose confirmed shutdown has not finished; enable() and attach() refuse meanwhile. */
+  #estopPending = 0;
+  /** The session stop()'s own recheck tick may send in (null: none). */
+  #manualSession: number | null = null;
+  /** Per motor: commands the loop sent and feedback sequence, at the last baseline (see #outstanding). */
+  #commandBase: Array<[number, number]> = [];
+  /** Per motor: commands the loop has sent. */
+  #commands: number[] = [];
+  /** The slow-loop warning went out this session. */
+  #slowWarned = false;
   private gravity: gravity.GravityFeedforward | null = null;
   /** floatMode(extraTorque). */
   private extraTorque: ExtraTorque | null = null;
@@ -274,6 +296,8 @@ export class Arm {
     this.wrap = new Array<number>(n).fill(0.0);
     this.awaiting = new Array<number | null>(n).fill(null);
     this.awaitingStatus = new Array<number | null>(n).fill(null);
+    this.#commands = new Array<number>(n).fill(0);
+    this.#commandBase = this.motors.map((m) => [0, m.feedbackSequence]);
   }
 
   get state(): ArmState {
@@ -532,7 +556,10 @@ export class Arm {
       };
     });
     const rate = this.loopRateHz;
-    return { state: this.#state, faultReason: this.faultReason, loopRateHz: rate === null ? null : pyRound(rate, 1), joints };
+    return {
+      state: this.#state, faultReason: this.faultReason, loopRateHz: rate === null ? null : pyRound(rate, 1),
+      unconfirmedDisable: [...this.unconfirmedDisable], joints,
+    };
   }
 
   // ── gripper (the joint named "gripper") ──
@@ -577,6 +604,7 @@ export class Arm {
     // Taken when enable() is called, so an estop() made while it waits its turn cancels it too.
     const generation = this.generation;
     return this.#lifecycle.run(async () => {
+      if (this.#estopPending) throw new StateError("an e-stop is in progress; enable() once it has finished");
       if (this.#state !== ArmState.CONNECTED) {
         throw new StateError(`enable() requires CONNECTED state, currently ${stateName(this.#state)}`);
       }
@@ -664,6 +692,7 @@ export class Arm {
     }
     const generation = this.generation;
     return this.#lifecycle.run(async () => {
+      if (this.#estopPending) throw new StateError("an e-stop is in progress; attach() once it has finished");
       if (this.#state !== ArmState.CONNECTED) {
         throw new StateError(`attach() requires CONNECTED state, currently ${stateName(this.#state)}`);
       }
@@ -695,11 +724,7 @@ export class Arm {
       this.#checkStart(pos, enabling, "attach");
       this.gravity = this.#makeGravity();
       const model = this.gravity;
-      if (model !== null && this.#attachGravity === "full" && torque.slice(0, model.n).every((t) => t === true)) {
-        // Every chain joint is holding under the previous owner's feed-forward: keep it at full level
-        // instead of easing it in from zero (a loaded joint would dip for RAMP_S).
-        model.level = 1.0;
-      }
+      if (model !== null && this.#attachGravity === "full") model.level = this.#carriedLoad(model, torque, pos);
       await this.#armWatchdogs();
       this.#startTargets(pos, speed ?? null);
       this.restPose = null;
@@ -736,6 +761,27 @@ export class Arm {
       }
       this.#goEnabled(true);
     });
+  }
+
+  /**
+   * attach()'s starting gravity level: the share of the model's holding torque the motors are
+   * carrying now, from their fresh feedback torques (joint sign), dot(measured, model) /
+   * dot(model, model) clamped to [0, 1]; the ease-in continues from there. 0 when any chain joint
+   * reports torque off or no torque state, or when the model torque is negligible.
+   */
+  #carriedLoad(model: gravity.GravityFeedforward, torque: Array<boolean | null>, pos: number[]): number {
+    const n = model.n;
+    if (!torque.slice(0, n).every((t) => t === true)) return 0.0;
+    const tau = model.model(pos.slice(0, n)).map((t, i) => pyMax(-model.limitsNm[i]!, pyMin(model.limitsNm[i]!, t)));
+    const measured = this.getJointTorques().slice(0, n);
+    let gg = 0.0, mg = 0.0;
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(tau[i]) || !Number.isFinite(measured[i])) return 0.0;
+      gg += tau[i]! * tau[i]!;
+      mg += measured[i]! * tau[i]!;
+    }
+    if (Math.sqrt(gg) < ATTACH_LOAD_MIN_NM) return 0.0;
+    return pyMin(1.0, pyMax(0.0, mg / gg));
   }
 
   /**
@@ -798,11 +844,15 @@ export class Arm {
     this.loopRateHz = null;
     this.rateWindow = [now, this.tickCount];
     this.slowWindows = 0;
+    this.#slowWarned = false;
+    this.#baselineReplies();
     this.#state = ArmState.ENABLED;
     if (startLoop) this.#startLoop();
   }
 
   #startLoop(): void {
+    // The loop rate is measured from here: a restart after stop() does not count the downtime.
+    this.rateWindow = [this.#clock.now(), this.tickCount];
     this.running = true;
     const handle: LoopHandle = { promise: Promise.resolve(), alive: true };
     const session = this.session;
@@ -958,24 +1008,28 @@ export class Arm {
   }
 
   /** Resolves true once the loop has ended, false after `timeout` seconds. */
-  #joinLoop(handle: LoopHandle, timeout: number): Promise<boolean> {
+  #joinLoop(handle: LoopHandle, timeout: number, signal?: AbortSignal): Promise<boolean> {
     if (!handle.alive) return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
+      const onAbort = (): void => resolve(!handle.alive);
       const cancel = this.#clock.timer(timeout, () => resolve(!handle.alive));
+      signal?.addEventListener("abort", onAbort, { once: true });
       void handle.promise.then(() => {
         cancel();
+        signal?.removeEventListener("abort", onAbort);
         resolve(true);
       });
     });
   }
 
-  async #stopLoop(): Promise<void> {
+  /** `signal`: an abort stops waiting for the loop to end (it still ends: its session is over). */
+  async #stopLoop(signal?: AbortSignal): Promise<void> {
     this.running = false;
     this.session += 1; // a tick still in flight stops sending at its next command
     this.#tickSignal.notify();
     const handle = this.loop;
     if (handle) {
-      if (!(await this.#joinLoop(handle, 1.0))) {
+      if (!(await this.#joinLoop(handle, 1.0, signal)) && !signal?.aborted) {
         this.#log.error("control loop did not stop within 1 s; waiting");
         await this.#joinLoop(handle, 2.0);
       }
@@ -1009,50 +1063,81 @@ export class Arm {
    * that stop an enable and the control loop are set before the returned promise is created.
    */
   async estop(): Promise<void> {
-    this.#log.warn("e-stop: releasing torque on all motors");
-    this.#endMotion();
-    this.generation += 1;
-    this.running = false;
-    this.session += 1;
-    this.#tickSignal.notify();
-    // An enable frame being confirmed (and its retries) goes out first, never after the torque-off.
-    await this.#enableGate.run(() => undefined);
-    if (this.#state !== ArmState.DISCONNECTED) await this.#disableAll();
-    await this.disable();
+    this.#estopPending += 1;
+    try {
+      this.#log.warn("e-stop: releasing torque on all motors");
+      this.#endMotion();
+      this.generation += 1;
+      this.running = false;
+      this.session += 1;
+      this.#manualSession = null;
+      this.#tickSignal.notify();
+      // An enable frame being confirmed (and its retries) goes out first, never after the torque-off.
+      await this.#enableGate.run(() => undefined);
+      if (this.#state !== ArmState.DISCONNECTED) await this.#disableAll();
+      await this.disable();
+    } finally {
+      this.#estopPending -= 1;
+    }
   }
 
   /**
    * Return to the rest pose, then release torque only if the return was verified.
    *
    * An arm without brakes must never be released away from rest. After a verified return the
-   * control loop stops and each returned joint is read once more; torque goes off only if every
-   * reading is fresh and no joint moved away from rest since the return was verified. Otherwise,
-   * and on any other way out (an error, aborting `options.signal`), the arm keeps holding its
-   * measured pose at full gains with the control loop running and false is returned; the caller
-   * decides when to disable().
+   * control loop stops and each returned joint, and each weight-carrying joint left out of the
+   * return, is read once more; torque goes off only if every reading answers that read, is fresh,
+   * no motor reports a fault and no joint moved away from rest. Resolves true only once every motor
+   * confirmed torque off. Otherwise, and on any other way out (an error, aborting
+   * `options.signal` before the first torque-off frame), the arm keeps holding its measured pose at
+   * the profile's gains with the control loop running and false is returned; the caller decides
+   * when to disable(). When the release was sent but some motor did not confirm it, false is
+   * returned with the arm CONNECTED, the control loop stopped and those motors listed in
+   * `unconfirmedDisable` (and status()); disable() tries the release again.
    */
   stop(options: StopOptions = {}): Promise<boolean> {
     const { signal } = options;
     return this.#lifecycle.run(async () => {
       if (this.#state !== ArmState.ENABLED && this.#state !== ArmState.FAULT) return true;
       let released = false;
+      // An abort wakes every wait of the return and invalidates stop()'s own recheck tick.
+      const wake = (): void => {
+        this.#manualSession = null;
+        this.#tickSignal.notify();
+        for (const m of this.motors) m.changed.notify();
+      };
+      signal?.addEventListener("abort", wake);
       try {
         const include = this.#returnedJoints();
         if (include === null) return false;
         if (!(await this.#returnToRest(null, signal))) return false;
         released = await this.#releaseIfStill(include, this.restPose!, signal);
-        return released;
+        return released && this.unconfirmedDisable.length === 0;
       } catch (e) {
         this.#log.error(`return to rest failed: ${errorText(e)}`);
         return false;
       } finally {
+        signal?.removeEventListener("abort", wake);
+        this.#manualSession = null;
         this.returning = false;
-        if (!released && (this.#state === ArmState.ENABLED || this.#state === ArmState.FAULT)) {
+        // An e-stop in progress owns the bus: nothing here may send another holding frame.
+        if (!released && !this.#estopPending && (this.#state === ArmState.ENABLED || this.#state === ArmState.FAULT)) {
+          this.#holdAtProfileGains();
           if (!this.running) this.#startLoop();
-          this.holdCurrentPosition();
         }
       }
     });
+  }
+
+  /**
+   * Hold the measured pose with the profile's gains: float mode, gains set by setGains() and
+   * float mode's extra torque end first, so the hold is serviced at full stiffness.
+   */
+  #holdAtProfileGains(): void {
+    this.config.joints = this.config.joints.map((j, i) => j.replace({ kp: this.profileGains[i]![0], kd: this.profileGains[i]![1] }));
+    this.extraTorque = null;
+    this.floating = false;
+    this.holdCurrentPosition();
   }
 
   /**
@@ -1069,8 +1154,8 @@ export class Arm {
     }
     const supported = this.#supportedRest();
     const pos = this.getJointPositions();
-    for (const i of this.#weightJoints(supported)) {
-      if (!include.includes(i) && (!Number.isFinite(pos[i]) || Math.abs(pos[i]! - supported[i]!) > cfg.restSettle)) {
+    for (const i of this.#excludedWeight(include, supported)) {
+      if (!Number.isFinite(pos[i]) || Math.abs(pos[i]! - supported[i]!) > cfg.restSettle) {
         this.#log.error(`${cfg.joints[i]!.label} carries the arm's weight, is away from rest and does not return; the arm keeps holding`);
         return null;
       }
@@ -1078,35 +1163,95 @@ export class Arm {
     return include;
   }
 
+  /** The weight-carrying joints the return leaves out. */
+  #excludedWeight(include: number[], supported: readonly number[]): number[] {
+    return this.#weightJoints(supported).filter((i) => !include.includes(i));
+  }
+
+  /** Start counting each motor's replies against the loop's commands from now on. */
+  #baselineReplies(): void {
+    this.#commandBase = this.motors.map((m, i) => [this.#commands[i]!, m.feedbackSequence]);
+  }
+
   /**
-   * Stop the loop, read every motor once (the holding frame the loop would send) and release
-   * torque only if each returned joint answered within REST_FRESH_S and is no further from `rest`
-   * than when the return was verified (or than restArrived), give or take REST_RECHECK: still
-   * converging toward rest is fine, moving away from it is not.
+   * Commands the loop sent to motor `i` since the baseline that have no reply yet (a motor answers
+   * each command once, in order). Extra replies (a Damiao status refresh is answered with a state
+   * frame) count as answers, so one of them can stand in for one lost reply.
+   */
+  #outstanding(i: number): number {
+    const [commands, sequence] = this.#commandBase[i]!;
+    return Math.max(0, (this.#commands[i]! - commands) - (this.motors[i]!.feedbackSequence - sequence));
+  }
+
+  /**
+   * Stop the loop, read every checked motor once (the holding frame the loop would send) and
+   * release torque only if each answered that read within the freshness bound, no motor reports a
+   * fault, each returned joint is no further from `rest` than when the return was verified (or than
+   * restArrived), give or take REST_RECHECK, and each weight-carrying joint left out of the return
+   * is still within restSettle of the supported pose.
+   *
+   * The reading counted for a motor answers a command sent after the loop stopped: replies are
+   * counted against the session's commands; once the loop's replies have drained (up to
+   * REPLY_TIMEOUT), a motor still owing one (lost, or held back until the next frame) is read once
+   * more before the recheck, so a reply up to one frame late cannot pass for the recheck's.
+   * The point of no return is the first torque-off frame: an abort before it holds, after it the
+   * release is finished and its real outcome reported.
    */
   async #releaseIfStill(include: number[], rest: readonly number[], signal?: AbortSignal): Promise<boolean> {
+    const cfg = this.config;
+    const supported = this.#supportedRest();
+    const excluded = this.#excludedWeight(include, supported);
+    const checked = [...include, ...excluded];
     const verified = this.getJointPositions();
+    const stopped = (): boolean => Boolean(signal?.aborted) || this.#estopPending > 0;
     this.#endMotion();
-    await this.#stopLoop();
-    if (this.loop !== null) {
-      this.#log.error("the control loop did not stop; the arm keeps holding");
-      return false;
+    await this.#stopLoop(signal);
+    if (stopped()) return this.#keepHolding("stop() was interrupted");
+    if (this.loop !== null) return this.#keepHolding("the control loop did not stop");
+    // Replies to the loop's commands drain first (up to REPLY_TIMEOUT). A motor still owing one (a
+    // reply lost, or held back in a buffer until the next frame) gets one extra read first, so the
+    // reply the recheck counts answers a command sent after the loop stopped.
+    const drainUntil = this.#clock.now() + this.REPLY_TIMEOUT;
+    for (const i of checked) {
+      const m = this.motors[i]!;
+      const left = drainUntil - this.#clock.now();
+      if (this.#outstanding(i) > 0 && left > 0) {
+        await m.changed.wait(() => this.#outstanding(i) === 0 || stopped(), left, this.#clock);
+      }
+      if (stopped()) return this.#keepHolding("stop() was interrupted");
     }
+    const read = async (): Promise<boolean> => {
+      this.#manualSession = this.session;
+      await this.tick(1.0 / cfg.controlRateHz, this.session);
+      const manual = this.#manualSession;
+      this.#manualSession = null;
+      return !stopped() && manual !== null;
+    };
+    if (checked.some((i) => this.#outstanding(i) > 0) && !(await read())) return this.#keepHolding("stop() was interrupted");
     const sequences = this.motors.map((m) => m.feedbackSequence);
-    await this.tick(1.0 / this.config.controlRateHz);
-    const deadline = this.#clock.now() + REST_FRESH_S;
-    for (const i of include) {
+    const commands = [...this.#commands];
+    if (!(await read())) return this.#keepHolding("stop() was interrupted");
+    const fresh = pyMin(cfg.feedbackTimeout, REST_FRESH_S);
+    const answered = (i: number): boolean => this.#commands[i]! > commands[i]!
+      && this.motors[i]!.feedbackSequence - sequences[i]! >= this.#commands[i]! - commands[i]!;
+    const deadline = this.#clock.now() + fresh;
+    for (const i of checked) {
       const m = this.motors[i]!;
       const left = deadline - this.#clock.now();
       if (left <= 0) break;
-      await m.changed.wait(() => m.feedbackSequence !== sequences[i], left, this.#clock);
+      await m.changed.wait(() => answered(i) || stopped(), left, this.#clock);
+      if (stopped()) return this.#keepHolding("stop() was interrupted");
     }
+    // Faults a reply latched during the waits count too: judged right before the release.
+    await this.#checkHealth();
     const now = this.getJointPositions();
-    const cfg = this.config;
     let problem: string | null = null;
+    const faulty = this.motors.findIndex((m) => m.faultLatched);
     if (this.#state !== ArmState.ENABLED) {
       problem = `state ${stateName(this.#state)}`;
-    } else if (!(this.#measuredSince(include, sequences) && include.every((i) => this.motors[i]!.feedbackAge <= REST_FRESH_S))) {
+    } else if (faulty >= 0) {
+      problem = `${cfg.joints[faulty]!.label} reports a fault (${this.motors[faulty]!.faultLatched})`;
+    } else if (!checked.every((i) => answered(i) && this.motors[i]!.feedbackAge <= fresh)) {
       problem = "no fresh reply";
     } else {
       for (const i of include) {
@@ -1116,17 +1261,31 @@ export class Arm {
           break;
         }
       }
+      for (const i of excluded) {
+        if (problem !== null) break;
+        if (!(Number.isFinite(now[i]) && Math.abs(now[i]! - supported[i]!) <= cfg.restSettle)) {
+          problem = `${cfg.joints[i]!.label} carries the arm's weight, does not return and is `
+            + `${degrees(Math.abs(now[i]! - supported[i]!)).toFixed(1)} deg from the supported pose`;
+        }
+      }
     }
-    if (problem === null && signal?.aborted) problem = "stop() was interrupted";
-    if (problem !== null) {
-      this.#log.error(`after the verified return to rest: ${problem}; the arm keeps holding`);
-      return false;
-    }
+    if (problem === null && stopped()) problem = "stop() was interrupted";
+    if (problem !== null) return this.#keepHolding(problem);
+    // The point of no return: from the first torque-off frame on the release is finished.
     await this.#releaseAll();
     this.released.clear();
     this.faulted.clear();
     this.#state = ArmState.CONNECTED;
+    if (this.unconfirmedDisable.length) {
+      this.#log.error(`stop(): torque release not confirmed on motors [${this.unconfirmedDisable.join(", ")}]; `
+        + "the control loop is stopped; disable() tries again, or cut motor power");
+    }
     return true;
+  }
+
+  #keepHolding(problem: string): boolean {
+    this.#log.error(`after the verified return to rest: ${problem}; the arm keeps holding`);
+    return false;
   }
 
   /** The profile's restPose, else zero, clipped into the soft limits. */
@@ -1171,9 +1330,13 @@ export class Arm {
     const target = [...pos];
     for (const i of carrying) {
       const j = cfg.joints[i]!;
+      const lo = j.lo + cfg.limitMargin, hi = j.hi - cfg.limitMargin;
+      // Enabled outside the soft limits (inside fullTurnGrace): no press; the loop's clip to the
+      // limits already moves it, and clamping a pressed target there could exceed the press bound.
+      if (pos[i]! < lo || pos[i]! > hi) continue;
       const press = pyMin(REST_PRESS, REST_PRESS_NM / j.kp);
       const moved = pos[i]! + pyMax(-press, pyMin(press, supported[i]! - pos[i]!));
-      target[i] = pyMin(j.hi - cfg.limitMargin, pyMax(j.lo + cfg.limitMargin, moved));
+      target[i] = pyMin(hi, pyMax(lo, moved));
     }
     return target;
   }
@@ -1219,7 +1382,9 @@ export class Arm {
     const product = this.config.product;
     const [lo, hi] = product.idRange;
     for (const value of [oldId, newId]) {
-      if (!(lo <= value && value <= hi)) throw new ValueError(`motor IDs must be in [${lo}, ${hi}], got ${value}`);
+      if (!(Number.isInteger(value) && lo <= value && value <= hi)) {
+        throw new ValueError(`motor IDs must be whole numbers in [${lo}, ${hi}], got ${value}`);
+      }
     }
     if (oldId === newId) throw new ValueError("old and new motor IDs are the same");
     return this.#lifecycle.run(async () => {
@@ -1260,6 +1425,22 @@ export class Arm {
         if (taken) throw new ArmError(`motor ID ${newId} already answers on the bus`);
         try {
           await target.setId(newId, timeout, torqueOffConfirmed);
+          // Both routes are probed before the joint is routed to the new id: nothing may answer at the old
+          // one any more (whatever the motor family checked itself).
+          const stale = product.createMotor(joint, this.#backend, hostId, this.#clock, this.#log);
+          temporary.set(oldId, stale);
+          let oldAnswers: boolean;
+          try {
+            await stale.check(this.REPLY_TIMEOUT, this.REPLY_ATTEMPTS);
+            oldAnswers = true;
+          } catch (e) {
+            if (!(e instanceof ParamTimeout)) throw e;
+            oldAnswers = false;
+          }
+          if (oldAnswers) {
+            throw new RouteUnverified(`${joint.label}: ID ${oldId} and ID ${newId} both answer after the id change: another `
+              + "motor answers on one of them; scan the bus and fix the profile");
+          }
         } catch (e) {
           if (e instanceof RouteUnverified) {
             // Either id may now reach the wrong motor: the joints configured at both ends are unverified.
@@ -1427,7 +1608,7 @@ export class Arm {
     const superseded = (): boolean => this.motion !== token;
     const current = this.getCommandedPositions();
     const q0 = current.slice(0, chain.n);
-    const plan = await planner.plan(chain, ik, target, rpyGoal, q0, cfg.controlRateHz, speed ?? null, {
+    const plan = await this.planFn(chain, ik, target, rpyGoal, q0, cfg.controlRateHz, speed ?? null, {
       clock: this.#clock, limit: timeout ?? null, cancel: () => superseded() || Boolean(signal?.aborted), pause: this.planPause,
     });
     if (superseded()) {
@@ -1470,6 +1651,11 @@ export class Arm {
       if (!this.#setTargets(row, speed, token)) return false;
       due += period;
       await this.#clock.sleep(Math.max(0.0, due - this.#clock.now()));
+    }
+    // A cancel during the last row's period holds too (checked on waking, as after every row).
+    if (signal?.aborted) {
+      this.#holdIfOwner(token);
+      return false;
     }
     return true;
   }
@@ -1534,7 +1720,11 @@ export class Arm {
     if (speed !== undefined && speed !== null && !(Number.isFinite(speed) && speed > 0)) {
       throw new ValueError("speed must be positive");
     }
-    if (signal?.aborted) return false;
+    if (signal?.aborted) {
+      // Continuing a motion (moveEe's arrival): its cancel holds the measured pose.
+      if (tokenArg !== null) this.#holdIfOwner(tokenArg);
+      return false;
+    }
     const token = tokenArg ?? this.#takeMotion();
     if (!this.#setTargets(goalQ, speed ?? null, token)) return false;
     if (!wait) return true;
@@ -1640,7 +1830,8 @@ export class Arm {
       }
     });
     const sequences = this.motors.map((m) => m.feedbackSequence);
-    if (!(await this.waitTicks(2))) {
+    if (!(await this.waitTicks(2, 1.0, signal))) {
+      if (signal?.aborted) return this.#interrupted();
       this.#log.error("return to rest aborted: control loop is not running");
       return false;
     }
@@ -1665,7 +1856,8 @@ export class Arm {
       if (this.motion !== token) return false;
       if (signal?.aborted) return this.#interrupted();
       for (const i of include) this.userTargets[i] = start[i]! + (rest[i]! - start[i]!) * frac;
-      await this.#clock.sleep(period);
+      await this.#sleep(period, signal);
+      if (signal?.aborted) return this.#interrupted();
       if (!this.#restFeedbackOk(include, this.getJointPositions())) return false;
     }
     let best = Infinity, stalled = 0;
@@ -1683,16 +1875,34 @@ export class Arm {
         stalled = 0;
       }
       best = pyMin(best, worst);
-      await this.#clock.sleep(period);
+      await this.#sleep(period, signal);
     }
     return false;
   }
 
-  /** True once `n` more control ticks have run; false after `timeout` s or when the loop stops. */
-  private async waitTicks(n: number, timeout = 1.0): Promise<boolean> {
+  /** clock.sleep(seconds), ended early when `signal` is aborted. */
+  #sleep(seconds: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) return this.#clock.sleep(seconds);
+    if (signal.aborted) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const done = (): void => {
+        cancel();
+        signal.removeEventListener("abort", done);
+        resolve();
+      };
+      const cancel = this.#clock.timer(seconds, done);
+      signal.addEventListener("abort", done, { once: true });
+    });
+  }
+
+  /**
+   * True once `n` more control ticks have run; false after `timeout` s, when the loop stops or
+   * when `signal` is aborted.
+   */
+  private async waitTicks(n: number, timeout = 1.0, signal?: AbortSignal): Promise<boolean> {
     const target = this.tickCount + n;
-    await this.#tickSignal.wait(() => this.tickCount >= target || !this.running, timeout, this.#clock);
-    return this.tickCount >= target;
+    await this.#tickSignal.wait(() => this.tickCount >= target || !this.running || Boolean(signal?.aborted), timeout, this.#clock);
+    return this.tickCount >= target && !signal?.aborted;
   }
 
   #restActive(): boolean {
@@ -1754,7 +1964,7 @@ export class Arm {
   }
 
   #maySend(session: number | null): boolean {
-    return session === null || (this.running && session === this.session);
+    return session === null || (session === this.session && (this.running || session === this.#manualSession));
   }
 
   /** One control period: rate-limited commands, frames, a status poll, health checks. */
@@ -1779,6 +1989,7 @@ export class Arm {
       this.internal[i]! += step;
     });
     const commands = [...this.internal];
+    const snapshot = this.motion;
     const feedforward = await this.#feedforward(commands, now);
     const paced = this.#backend.feedbackPacedControl;
     const joints = cfg.joints;
@@ -1810,9 +2021,14 @@ export class Arm {
           [position, kp, kd] = this.#gripperCommand(i, j, hold, commands[i]!, now);
         }
         await this.#spaceFrom(lastSend);
+        // Waiting for the spacing lets other work run: a shutdown may have ended this session, and
+        // a hold or a fault may have replaced the command this frame was computed from.
+        if (!this.#maySend(session)) return;
+        if (this.motion !== snapshot && !this.hold.has(i) && !this.pythonFrames) position = this.internal[i]!;
         lastSend = this.#clock.now();
         sentAt = this.#clock.now();
         await motor.sendCommand(this.#toMotor(i, position), 0.0, kp, kd, tau);
+        this.#commands[i]! += 1;
       } catch (e) {
         if (!this.faulted.has(i)) await this.#enterFault(`${j.label}: command failed (${errorText(e)})`, i);
         continue;
@@ -1842,6 +2058,9 @@ export class Arm {
         const m = this.motors[i]!;
         this.pollSent.set(m.motorId, now);
         await this.#spaceFrom(lastSend);
+        // A shutdown during the spacing wait does not stop this read-only, non-clearing query (the
+        // Python SDK sends it too, and the frame replay records it).
+        if (m.pollAnsweredByFeedback) this.#commands[i]! += 1;
         // A query that fails to go out counts as unanswered too: if none can be sent, the status
         // deadline still runs out.
         this.awaitingStatus[i] = this.#stillAwaiting((this.awaitingStatus[i] ?? null), m.statusAge, this.#clock.now());
@@ -2043,7 +2262,8 @@ export class Arm {
     const target = this.config.controlRateHz;
     if (rate < SLOW_LOOP_SHARE * target) {
       this.slowWindows += 1;
-      if (this.slowWindows === 2) {
+      if (this.slowWindows >= 2 && !this.#slowWarned) {
+        this.#slowWarned = true;
         this.#log.warn(`the control loop runs at ${rate.toFixed(0)} Hz, below the profile's ${target.toFixed(0)} Hz: this computer `
           + "cannot keep up. Speed limits still hold (each tick moves by the time that passed); fewer programs, or a faster "
           + "computer, restore the rate");

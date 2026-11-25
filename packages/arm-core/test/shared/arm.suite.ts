@@ -377,13 +377,229 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       }
     });
 
+    /** The profile's kp of the returned joint (twoJointConfig), whatever setGains()/floatMode() did since. */
+    const PROFILE_KP = twoJointConfig().joints[0]!.kp;
+
     /** The loop runs and the last frame to the returned joint carries the profile's kp. */
     async function holdingAtFullGains(arm: Made["arm"], fake: FakeMotorLike, clock: VirtualClock): Promise<boolean> {
       await clock.sleep(0.05);
       const last = fake.frames[fake.frames.length - 1];
       return arm["running"] && arm["loop"] !== null && arm["loop"].alive && last !== undefined
-        && Math.abs(last[1] - arm.config.joints[0]!.kp) <= 0.2;
+        && Math.abs(last[1] - PROFILE_KP) <= 0.2;
     }
+
+    for (const change of ["floatMode", "setGains"] as const) {
+      it(`an interrupted stop holds at the profile's gains after ${change}()`, async () => {
+        const { arm, fakes, clock } = make(null, fastRest({ restRateHz: 1 }));
+        await arm.connect();
+        await arm.enable();
+        try {
+          arm["synced"] = [true, true];
+          expect(await arm.moveTo([1.0, -0.5], { timeout: 3.0 })).toBe(true);
+          if (change === "floatMode") arm.floatMode(0.2, () => [0.1, 0.0]);
+          else arm.setGains([5.0, 20.0], [0.5, 0.5]);
+          await clock.sleep(0.05);
+          const interrupt = new AbortController();
+          clock.timer(0.02, () => interrupt.abort());
+          expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+          expect(arm.state).toBe(ArmState.ENABLED);
+          expect(await holdingAtFullGains(arm, fakes[1]!, clock)).toBe(true);
+          expect(arm.config.joints[0]!.kp).toBe(PROFILE_KP);
+          expect(arm["extraTorque"]).toBe(null);
+          expect(arm["floating"]).toBe(false);
+        } finally {
+          await arm.disable();
+          await arm.disconnect();
+        }
+      });
+    }
+
+    it("an abort wakes stop() at once, even at a 1 Hz rest rate", async () => {
+      const { arm, clock } = make(null, fastRest({ restRateHz: 1, restSpeed: radians(5) }));
+      await arm.connect();
+      await arm.enable();
+      try {
+        arm["synced"] = [true, true];
+        expect(await arm.moveTo([1.0, -0.5], { timeout: 3.0 })).toBe(true);
+        const interrupt = new AbortController();
+        let aborted = 0;
+        clock.timer(0.3, () => {
+          aborted = clock.now();
+          interrupt.abort();
+        });
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(clock.now() - aborted).toBeLessThan(0.02);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("an abort after the first torque-off frame finishes the release and reports it", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const interrupt = new AbortController();
+      // abort when the first neutral (kp 0) command goes out
+      const send = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = send(canId, data);
+        const last = fakes[1]!.frames[fakes[1]!.frames.length - 1];
+        if (classify(canId, data)[0] === "command" && last !== undefined && last[1] === 0 && !arm["running"]) interrupt.abort();
+        return replies;
+      };
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(true);
+        expect(interrupt.signal.aborted).toBe(true);
+        expect(arm.state).toBe(ArmState.CONNECTED);
+        expect(fakes[1]!.enabled).toBe(false);
+      } finally {
+        await arm.disconnect();
+      }
+    });
+
+    it("stop() does not report a release it could not confirm", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      let dropping = false;
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        if (dropping && classify(canId, data)[0] === "disable") return []; // every disable frame to it is lost
+        return handle(canId, data);
+      };
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = (dt: number, session: number | null = null) => {
+        if (!arm["running"]) dropping = true;
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(arm.state).toBe(ArmState.CONNECTED);
+        expect(arm.unconfirmedDisable).toEqual([1]);
+        expect(arm.status().unconfirmedDisable).toEqual([1]);
+        expect(arm["running"]).toBe(false);
+      } finally {
+        dropping = false;
+        await arm.disable();
+        expect(arm.unconfirmedDisable).toEqual([]); // disable() tries again
+        await arm.disconnect();
+      }
+    });
+
+    it("a buffered reply from before the recheck does not count as the recheck's", async () => {
+      // The last loop command's reply is held back (an adapter buffer) and comes out when the next
+      // frame goes; the recheck's own reply is held back the same way. Meanwhile the joint moved.
+      const { arm, fakes, bus } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let buffering = false, held: Array<[number, Uint8Array]> = [];
+      const handle = fakes[1]!.handle.bind(fakes[1]!);
+      fakes[1]!.handle = (canId: number, data: Uint8Array) => {
+        const replies = handle(canId, data);
+        if (!buffering) return replies;
+        const out = held;
+        held = replies;
+        return out;
+      };
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        if (!arm["running"]) {
+          fakes[1]!.track = false;
+          fakes[1]!.position += 0.45; // moved after the loop's last frame
+        } else if (arm["returning"]) {
+          buffering = true; // from the return's ticks on, each reply comes one frame late
+        }
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        buffering = false;
+        arm["tick"] = tick;
+        await arm.disable();
+        await arm.disconnect();
+      }
+      void bus;
+    });
+
+    it("a fault latched after the recheck tick's own health check refuses the release", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let latched: string | null = null;
+      Object.defineProperty(arm.motors[0]!, "faultLatched", { get: () => latched, configurable: true });
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        await tick(dt, session);
+        if (!arm["running"]) latched = "a reply latched a fault"; // after this tick's health check
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        latched = null;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("the recheck needs a reading younger than feedbackTimeout when that is below REST_FRESH_S", async () => {
+      const { arm, fakes, clock } = make(null, fastRest({ feedbackTimeout: 0.015 }));
+      await arm.connect();
+      await arm.enable();
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        await tick(dt, session);
+        if (!arm["running"]) await clock.sleep(0.03); // the recheck reading is 30 ms old when judged
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("an e-stop during the recheck is followed by no holding frame", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      let stopping: Promise<void> | null = null;
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = (dt: number, session: number | null = null) => {
+        if (!arm["running"] && stopping === null) stopping = arm.estop();
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        await stopping;
+        const log = fakes[1]!.log;
+        const first = log.indexOf("disable");
+        expect(first).toBeGreaterThanOrEqual(0);
+        expect(log.slice(first).some((e) => Array.isArray(e) && e[0] === "cmd" && e[1] > 0)).toBe(false);
+        expect(arm.state).toBe(ArmState.CONNECTED);
+        expect(fakes[1]!.enabled).toBe(false);
+      } finally {
+        await arm.disconnect();
+      }
+    });
+
+    it("enable() right after estop() is refused until the e-stop has finished", async () => {
+      const { arm, fakes } = make(null, fastRest());
+      await arm.connect();
+      const stopping = arm.estop();
+      const enabling = arm.enable().then(() => null, (e: unknown) => e);
+      await stopping;
+      const refused = await enabling;
+      expect(refused).toBeInstanceOf(StateError);
+      expect(String(refused)).toMatch(/e-stop is in progress/);
+      expect(fakes[1]!.log).not.toContain("enable");
+      expect(fakes[1]!.enabled).toBe(false);
+      await arm.disconnect();
+    });
 
     it("an interrupted return (a second Ctrl-C) leaves the arm holding at full gains", async () => {
       const { arm, fakes, clock } = make(null, fastRest());
@@ -413,7 +629,7 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       const interrupt = new AbortController();
       const tick = arm["tick"].bind(arm);
       arm["tick"] = (dt: number, session: number | null = null) => {
-        if (session === null) interrupt.abort(); // stop()'s own reading after the loop stopped
+        if (!arm["running"]) interrupt.abort(); // stop()'s own reading after the loop stopped
         return tick(dt, session);
       };
       try {
@@ -436,7 +652,7 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       const tick = arm["tick"].bind(arm);
       let moved = false;
       arm["tick"] = (dt: number, session: number | null = null) => {
-        if (session === null && !moved && arm.state === ArmState.ENABLED) {
+        if (!arm["running"] && !moved && arm.state === ArmState.ENABLED) {
           moved = true;
           fakes[1]!.track = false;
           fakes[1]!.position += 0.1; // nudged while the loop was stopping
@@ -473,6 +689,30 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         await arm.disable();
         await arm.disconnect();
       }
+    });
+  });
+
+  describe("feedback silence counts from the request", () => {
+    it("a stalled loop is not taken for a silent motor", async () => {
+      const { arm, clock } = await enabledArm(null, { feedbackTimeout: 0.05 });
+      await arm["tick"](0.005);
+      await clock.sleep(0.15); // the loop could not run, so nothing asked the motors
+      await arm["tick"](0.005);
+      expect(arm.state).toBe(ArmState.ENABLED);
+    });
+
+    it("a silent motor still faults after a stall", async () => {
+      const { arm, clock, fakes } = await enabledArm(null, { feedbackTimeout: 0.05 });
+      await arm["tick"](0.005);
+      await clock.sleep(0.15);
+      fakes[1]!.online = false;
+      await arm["tick"](0.005); // asked now; no answer
+      expect(arm.state).toBe(ArmState.ENABLED);
+      await clock.sleep(0.06);
+      await arm["tick"](0.005);
+      expect(arm.state).toBe(ArmState.FAULT);
+      expect(arm.faultReason).toContain("feedback timeout");
+      await arm.disable();
     });
   });
 

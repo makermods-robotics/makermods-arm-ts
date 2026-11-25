@@ -77,6 +77,8 @@ export interface Motor {
   sendCommand(pos: number, vel: number, kp: number, kd: number, tau: number): Promise<void>;
   /** Non-clearing fault/status query; the reply updates `status`. */
   pollStatus(): Promise<void>;
+  /** Is pollStatus() answered with a feedback frame (one that advances `feedbackSequence`)? */
+  readonly pollAnsweredByFeedback?: boolean;
 
   // Queries: wait for the reply.
   /** Zero-gain command at `pos`; true once the motor replies. */

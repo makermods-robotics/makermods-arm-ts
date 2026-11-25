@@ -55,6 +55,11 @@ class Waiter:
     def __init__(self, name):
         self.name = name
         self.go = threading.Event()
+        self.interrupted = False
+
+
+class Interrupt:
+    """A SIGINT due for the main thread: it ends whatever sleep or wait the main thread is in."""
 
 
 class Sched:
@@ -83,6 +88,13 @@ class Sched:
                 continue
             self.t = max(self.t, entry[0])
             waiter = entry[2]
+            if isinstance(waiter, Interrupt):
+                # Ctrl-C: Python raises KeyboardInterrupt in the main thread, ending its sleep or wait at once.
+                waiter = self.main
+                for other in self.timers:
+                    if other[2] is waiter:
+                        other[3] = False
+                waiter.interrupted = True
             for c in list(self.conditions):   # a condition waiter's timeout fired
                 if c[1] is waiter:
                     self.conditions.remove(c)
@@ -103,6 +115,7 @@ class Sched:
         me = self.current
         self._timer(self.t + max(0.0, seconds), me)
         self._switch(me)   # whatever a notification made runnable runs first
+        self._raise_if_interrupted(me)
 
     def wait_until(self, predicate, timeout):
         if predicate():
@@ -111,7 +124,18 @@ class Sched:
         entry = self._timer(self.t + timeout, me) if timeout is not None else None
         self.conditions.append([predicate, me, entry])
         self._switch(me)
+        self._raise_if_interrupted(me)
         return predicate()
+
+    def interrupt_at(self, at):
+        """A Ctrl-C at time `at`; the entry is returned so an unused one can be cancelled."""
+        return self._timer(at, Interrupt())
+
+    @staticmethod
+    def _raise_if_interrupted(me):
+        if me.interrupted:
+            me.interrupted = False
+            raise KeyboardInterrupt
 
     def notify(self):
         for c in list(self.conditions):
@@ -325,22 +349,15 @@ def run(scenario):
             elif kind == "stop":
                 at_times(op.get("events"), sim_event)
                 interrupt = op.get("interrupt_at")
-                if interrupt is not None:
-                    # A second Ctrl-C: raised in stop()'s thread at its first feedback check from then on.
-                    feedback_ok, due = arm._rest_feedback_ok, SCHED.t + interrupt
-
-                    def interrupted(*a, **k):
-                        if SCHED.t >= due:
-                            raise KeyboardInterrupt
-                        return feedback_ok(*a, **k)
-                    arm._rest_feedback_ok = interrupted
+                # A second Ctrl-C: KeyboardInterrupt in stop()'s thread at that time, ending the sleep or wait it is in.
+                pending = None if interrupt is None else SCHED.interrupt_at(SCHED.t + interrupt)
                 try:
                     result = arm.stop()
                 except KeyboardInterrupt:
                     result = False   # the TypeScript stop() resolves false once its signal is aborted
                 finally:
-                    if interrupt is not None:
-                        del arm._rest_feedback_ok
+                    if pending is not None:
+                        pending[3] = False
             elif kind == "move_ee":
                 n = arm.chain.n
                 if "xyz" not in op:   # recorded for the replay

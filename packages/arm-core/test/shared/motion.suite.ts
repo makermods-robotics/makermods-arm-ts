@@ -216,6 +216,102 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
   });
 
+  describe("motion ownership (stricter than Python def3243 where noted)", () => {
+    it("a motion superseded after its plan but before its first row commits no row", async () => {
+      const { arm, clock } = await enabled();
+      try {
+        instantPlanning(arm);
+        const plan = arm["planFn"];
+        arm["planFn"] = async (...args: Parameters<typeof plan>) => {
+          const result = await plan(...args);
+          arm.holdCurrentPosition(); // stop()'s hold takes over at the last moment
+          return result;
+        };
+        const before = arm.getCommandedPositions();
+        expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.02]), { timeout: 5.0 })).toBe(false);
+        await clock.sleep(0.2);
+        expect(close(arm["userTargets"].slice(0, 6), before.slice(0, 6), 1e-3)).toBe(true);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
+    it("an e-stop and a new enable during the planner setup leave the new session alone", async () => {
+      const { arm, clock } = await enabled();
+      const setup = trajectoryIk.TrajectoryIK.fromConfig;
+      let overtaken: Promise<void> | null = null;
+      trajectoryIk.TrajectoryIK.fromConfig = (...args: Parameters<typeof setup>) => {
+        overtaken = (async () => {
+          await arm.estop();
+          await arm.enable();
+        })();
+        return setup(...args);
+      };
+      try {
+        instantPlanning(arm);
+        expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.02]), { timeout: 5.0 })).toBe(false);
+        await overtaken;
+        const held = arm.getCommandedPositions();
+        await clock.sleep(0.3);
+        expect(close(arm["userTargets"], held, 1e-6)).toBe(true);
+      } finally {
+        trajectoryIk.TrajectoryIK.fromConfig = setup;
+        await teardown(arm);
+      }
+    });
+
+    it("a cancel during the last row's period holds (stricter)", async () => {
+      const { arm, clock } = await enabled();
+      try {
+        const q0 = arm.getCommandedPositions().slice(0, 6);
+        const last = [q0[0]! + 0.4, ...q0.slice(1)];
+        arm["planFn"] = async () => ({ q: [q0, last], reason: "" });
+        const period = 1.0 / arm.config.controlRateHz;
+        const cancel = new AbortController();
+        clock.timer(1.5 * period, () => cancel.abort());
+        expect(await arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.0]), { speed: 0.5, signal: cancel.signal })).toBe(false);
+        expect(Math.abs(arm["userTargets"][0]! - last[0]!)).toBeGreaterThan(0.1); // the measured pose, not the last row
+        expect(close(arm["userTargets"].slice(0, 6), arm.getJointPositions().slice(0, 6), 0.03)).toBe(true);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
+    it("a frame computed before a hold is not sent after it (stricter)", async () => {
+      const { arm, sim, clock } = await enabled();
+      try {
+        const lift = 1;
+        const far = [...arm.getCommandedPositions()];
+        far[lift] = far[lift]! - 0.5;
+        expect(arm.setJointTargets(far)).toBe(true);
+        await clock.sleep(0.1); // moving
+        // The next send to shoulder_pan is slow; meanwhile a hold is installed.
+        const bus = arm.backend as unknown as { send: (id: number, d: Uint8Array, e?: boolean) => Promise<void> };
+        const send = bus.send.bind(bus);
+        let armed = true, held: number[] | null = null;
+        bus.send = async (id: number, d: Uint8Array, e?: boolean) => {
+          if (armed && id === arm.motors[0]!.motorId && d.length === 8 && !d.slice(0, 6).every((b) => b === 0xff)) {
+            armed = false;
+            await send(id, d, e);
+            await clock.sleep(0.003);
+            arm.holdCurrentPosition();
+            held = arm.getCommandedPositions();
+            return;
+          }
+          return send(id, d, e);
+        };
+        await clock.sleep(0.05);
+        expect(held).not.toBeNull();
+        const frames = sim.motor("shoulder_lift").frames;
+        // every shoulder_lift frame after the hold carries the held position
+        const after = frames.slice(-3);
+        expect(after.every(([p]) => Math.abs(p - held![lift]! * arm.config.joints[lift]!.direction) < 1e-3)).toBe(true);
+      } finally {
+        await teardown(arm);
+      }
+    });
+  });
+
   describe("planning limits", () => {
     function setup() {
       const config = fk.defaultConfig();
@@ -265,6 +361,24 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         { clock: late, limit: length - 0.0005, pause: () => late.sleep(0.001) });
       expect(result.q).toBe(null);
       expect(result.reason).toContain("timed out");
+    });
+
+    it("an expired allowance is checked before the path's own replaces it (stricter)", () => {
+      const clock = new VirtualClock({ start: 10 });
+      const budget = new planner.Budget(clock, null, null);
+      void clock.advance(planner.PLAN_START_S + 0.1);
+      return clock.advance(0).then(() => {
+        expect(() => budget.ticks(100)).toThrow(planner.PlanStopped);
+      });
+    });
+
+    it("straightLineAsync gives the event loop a turn every few hundred rows and builds the same rows", async () => {
+      const { chain, q0 } = setup();
+      const start = chain.fk(q0), goal = chain.fk(q0.map((q) => q + 0.2));
+      let pauses = 0;
+      const rows = await trajectoryIk.straightLineAsync(start, goal, 10000, { pause: async () => void (pauses += 1) });
+      expect(pauses).toBe(Math.floor(9999 / trajectoryIk.STRAIGHT_LINE_ROWS_PER_PAUSE));
+      expect(rows).toEqual(trajectoryIk.straightLine(start, goal, 10000));
     });
 
     it("the budget: start allowance, then margin plus per tick, never past the ceiling or the caller's limit", () => {
@@ -390,6 +504,54 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
   });
 
+  describe("stop() rechecks (stricter than Python def3243)", () => {
+    it("enabled outside a soft limit near the support, the rest target is not clamped past the press bound", async () => {
+      const base = fk.defaultConfig();
+      const config = base.replace({ restWindow: radians(12.0) });
+      const lift = config.joints.findIndex((j) => j.name === "shoulder_lift");
+      const positions = pose(config, NEAR_REST_DEG);
+      positions[lift] = config.joints[lift]!.hi + radians(4.0); // past the soft limit, inside fullTurnGrace
+      const { arm } = await enabled({ config, positions });
+      try {
+        const q = arm.getJointPositions(), j = arm.config.joints[lift]!;
+        expect(Math.abs(arm.restPose![lift]! - q[lift]!)).toBeLessThanOrEqual(Math.min(REST_PRESS, REST_PRESS_NM / j.kp) + 1e-9);
+      } finally {
+        await teardown(arm);
+      }
+    });
+
+    it("a weight-carrying joint left out of the return is rechecked right before the release", async () => {
+      const base = fk.defaultConfig();
+      const lift = base.joints.findIndex((j) => j.name === "shoulder_lift");
+      const config = base.replace({
+        joints: base.joints.map((j, i) => (i === lift ? j.replace({ returnToRest: false }) : j)), restWindow: null,
+      });
+      const positions = pose(config, NEAR_REST_DEG);
+      positions[lift] = Math.min(config.joints[lift]!.hi, Math.max(config.joints[lift]!.lo, 0.0)); // at its support
+      const { arm, sim } = await enabled({ config, positions });
+      const tick = arm["tick"].bind(arm);
+      let moved = false;
+      arm["tick"] = (dt: number, session: number | null = null) => {
+        if (!arm["running"] && !moved) {
+          moved = true;
+          const m = sim.motor("shoulder_lift");
+          m.track = false;
+          m.position -= 0.4; // raised during the final recheck
+        }
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(moved).toBe(true);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(sim.motor("shoulder_lift").enabled).toBe(true);
+      } finally {
+        arm["tick"] = tick;
+        await teardown(arm);
+      }
+    });
+  });
+
   describe("control loop timing", () => {
     it("measures the loop rate and reports it in status()", async () => {
       const { arm, clock } = fk.makeArm(null, {}, new VirtualClock({ start: 1000 }));
@@ -421,6 +583,64 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         expect(arm.loopRateHz!).toBeLessThan(0.9 * arm.config.controlRateHz);
         const warnings = logger.messages.filter(([level, m]) => level === "warn" && m.includes("cannot keep up"));
         expect(warnings.length).toBe(1);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("the slow-loop warning goes out once per session, also after a recovery", async () => {
+      const { arm, clock, logger } = fk.makeArm(null, {}, new VirtualClock({ start: 1000 }));
+      let slow = true;
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        await tick(dt, session);
+        if (slow) await clock.sleep(0.009);
+      };
+      await arm.connect();
+      await arm.enable();
+      try {
+        await clock.sleep(3.5);
+        slow = false;
+        await clock.sleep(2.5); // recovered
+        slow = true;
+        await clock.sleep(3.5);
+        const warnings = logger.messages.filter(([level, m]) => level === "warn" && m.includes("cannot keep up"));
+        expect(warnings.length).toBe(1);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("the loop rate after stop() restarted the loop does not count the downtime", async () => {
+      const { arm, clock, fakes } = fk.makeArm(null, { restSpeed: radians(600), restRateHz: 200, restTimeout: 2.0 },
+        new VirtualClock({ start: 1000 }));
+      await arm.connect();
+      await arm.enable();
+      const tick = arm["tick"].bind(arm);
+      let moved = false;
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        if (!arm["running"] && !moved) {
+          moved = true;
+          await clock.sleep(0.4); // a slow recheck
+          fakes[1]!.track = false;
+          fakes[1]!.position += 0.1; // and the joint moved: stop() holds and restarts the loop
+        }
+        return tick(dt, session);
+      };
+      try {
+        await clock.sleep(0.7);
+        expect(await arm.stop()).toBe(false);
+        const restarted = clock.now();
+        const rates: number[] = [];
+        while (clock.now() - restarted < 1.2) {
+          await clock.sleep(0.01);
+          if (arm.loopRateHz !== null && rates[rates.length - 1] !== arm.loopRateHz) rates.push(arm.loopRateHz);
+        }
+        expect(rates.length).toBeGreaterThan(0);
+        expect(Math.abs(rates[rates.length - 1]! - arm.config.controlRateHz)).toBeLessThan(2.0);
+        expect(rates.every((r) => Math.abs(r - arm.config.controlRateHz) < 2.0), JSON.stringify(rates)).toBe(true);
       } finally {
         await arm.disable();
         await arm.disconnect();

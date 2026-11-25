@@ -37,8 +37,10 @@ button.onclick = async () => {
 
 `arm.setJointTargets(q)` stores a target; the arm's own loop limits and sends it. `arm.estop()`
 releases torque at once. `arm.stop()` releases torque only after a verified return to rest and a
-fresh recheck of the pose; otherwise, or when its `signal` is aborted (`stop({ signal })`), it
-resolves false with the arm holding at full gains.
+fresh recheck of the pose, and resolves true only once every motor confirmed torque off; otherwise,
+or when its `signal` is aborted (`stop({ signal })`), it resolves false with the arm holding at the
+profile's gains. A release some motor did not confirm resolves false with the arm CONNECTED and
+those motors in `arm.unconfirmedDisable`.
 
 The control loop runs on the thread the arm was created on. Keep long synchronous work off that
 thread (use the `...Async` IK solves, or run the arm in a Web Worker): while it runs no frames go

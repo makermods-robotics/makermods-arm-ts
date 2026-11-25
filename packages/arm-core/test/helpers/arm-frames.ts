@@ -90,6 +90,7 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
     const made = new Arm(config, bus, { clock, logger: silent, attachGravity: "ramp" });
     // The Python generator plans in-process, which takes no fake time: plan without letting timers fire.
     made["planPause"] = () => Promise.resolve();
+    made["pythonFrames"] = true;
     return made;
   };
   const motor = (op: Op | SimEvent): M => motors[labels.indexOf(String(op.joint))]!;

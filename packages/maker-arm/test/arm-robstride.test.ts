@@ -2,7 +2,7 @@
 // specifics (parameter-capable firmware, mode bits, RUN_MODE, the CAN-timeout watchdog and the
 // separate fault poll).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ArmConfigInit, ArmState, ConnectError, RobStrideMotor, StateError } from "@makermods/maker-arm";
+import { type ArmConfigInit, ArmState, ConnectError, protocol, RobStrideMotor, StateError } from "@makermods/maker-arm";
 import { VirtualClock } from "@makermods/maker-arm/testing";
 import { classify, FakeMotor, makeArm } from "./fakes.js";
 
@@ -192,6 +192,16 @@ describe("RobStride arm behaviour", () => {
     await expect(p).rejects.toThrow(/read back/);
     expect(gripper.log).toContainEqual(["write", 0x7028]);
     expect(gripper.log).not.toContain("enable");
+  });
+
+  it("an id that is not a whole number is refused at the arm, the motor and the protocol", async () => {
+    const { arm, bus } = make();
+    await expect(arm.setMotorId(1, 42.9, { torqueOffConfirmed: true })).rejects.toThrow(/motor IDs must be/);
+    expect(bus.isOpen).toBe(false);
+    expect(bus.sent).toEqual([]);
+    await expect(arm.motors[0]!.setId(42.9, 0.5, true)).rejects.toThrow(/motor id must be/);
+    expect(() => protocol.encodeSetId(1, 42.9)).toThrow(/MIT motor ID/);
+    expect(bus.sent).toEqual([]);
   });
 
   it("setMotorId changes the motor and routes the joint to it", async () => {
