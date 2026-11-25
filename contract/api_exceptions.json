@@ -1,6 +1,7 @@
 {
  "all": {
   "arm.Arm.from_yaml": "no filesystem in a browser: build the config with defaultConfig(overrides) or ArmConfig.fromRaw(raw, product)",
+  "arm.Arm.PLAN_IN_HELPER": "no helper process: moveEe plans cooperatively on the event loop under the same limits (docs/porting.md, Intended differences)",
   "config.ArmConfig.from_yaml": "no filesystem in a browser: ArmConfig.fromRaw(raw, product) takes the same keys as the YAML",
   "kinematics.resolve_urdf": "the profile carries the URDF text, not a path",
   "kinematics.IKResult": "a TypeScript type (no runtime value)",

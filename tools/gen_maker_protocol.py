@@ -85,6 +85,8 @@ def command_cases():
     for name, fn in encoders.items():
         for motor_id in [0, 1, 2, 64, 127, 128]:
             out.append({"fn": name, "args": [motor_id], **attempt(fn, motor_id)})
+    for motor_id, new_id in [(7, 8), (1, 127), (127, 1), (7, 0), (7, 128), (0, 5), (128, 5)]:
+        out.append({"fn": "set_id", "args": [motor_id, new_id], **attempt(p.encode_set_id, motor_id, new_id)})
     for motor_id, opcode, arg in [(5, 0xAB, 0x1FF), (7, 0x12, 0), (1, 0xFC, -1)]:
         out.append({"fn": "command", "args": [motor_id, opcode, arg], **attempt(p.command, motor_id, opcode, arg)})
     return out

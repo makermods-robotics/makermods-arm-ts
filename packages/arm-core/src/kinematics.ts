@@ -10,8 +10,8 @@
  * Links hanging off the chain (gripper jaws on prismatic joints, a fixed tool link) are lumped
  * into the chain link they hang from, with their own joints held at 0.
  *
- * FK, Jacobians, gravity torques and potential energy keep the Python SDK's numpy operation order
- * (see linalg.ts). Angles go through `Math.sin` / `Math.cos`, which can differ from the C library's
+ * FK, Jacobians and potential energy keep the Python SDK's numpy operation order (see linalg.ts),
+ * gravity torques its plain-float operation order. Angles go through `Math.sin` / `Math.cos`, which can differ from the C library's
  * in the last bit, so results agree with Python's to a few units in the last place, not bit for bit.
  */
 
@@ -95,6 +95,17 @@ function rotationErrorFlat(target: Float64Array, currentT: Float64Array, tOff = 
   }
   const f = angle / (2.0 * Math.sin(angle));
   return vee.map((v) => v * f);
+}
+
+/** 3x3 product of row-major `a` and `b` (offset `bo`), each term summed left to right as Python's float `_mat_mul`. */
+function floatMat3Mul(a: ArrayLike<number>, b: ArrayLike<number>, bo: number): number[] {
+  const out = new Array<number>(9);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      out[3 * r + c] = a[3 * r]! * b[bo + c]! + a[3 * r + 1]! * b[bo + 3 + c]! + a[3 * r + 2]! * b[bo + 6 + c]!;
+    }
+  }
+  return out;
 }
 
 function skew(v: ArrayLike<number>, off = 0): Float64Array {
@@ -457,38 +468,64 @@ export class Chain {
   /**
    * Per joint (joint coordinates, N*m): the torque that holds the chain still at `q`, i.e. dV/dq of
    * its potential energy V = -sum(m g . c).
+   *
+   * Plain float arithmetic in the Python SDK's operation order (its float `gravity_torques`), so the
+   * torques match it bit for bit wherever `Math.sin`/`Math.cos` match the C library. `masses` and
+   * `sign` are read on every call.
    */
   gravityTorques(q: readonly number[], gravity: readonly number[] = GRAVITY): number[] {
     const n = this.n;
-    const { axes, pivots, segR, segP } = this.#frames(this.#theta(q));
-    const coms = this.#coms;
-    const m = this.masses.slice(1);
-    const mc = new Float64Array(3 * n);
+    const theta = this.#theta(q);
+    const gx = Number(gravity[0]), gy = Number(gravity[1]), gz = Number(gravity[2]);
+    const fixedR = this.#fixedR, fixedP = this.#fixedP, axes = this.#axes, k1 = this.#k, k2 = this.#k2, coms = this.#coms;
+    let rot: ArrayLike<number> = this.#mountR;
+    let px = this.#mountP[0]!, py = this.#mountP[1]!, pz = this.#mountP[2]!;
+    const worldAxes = new Float64Array(3 * n);
+    const pivots = new Float64Array(3 * n);
+    const moments = new Float64Array(3 * n);
+    const turn = new Array<number>(9);
     for (let i = 0; i < n; i++) {
+      const fx = fixedP[3 * i]!, fy = fixedP[3 * i + 1]!, fz = fixedP[3 * i + 2]!;
+      px += rot[0]! * fx + rot[1]! * fy + rot[2]! * fz;
+      py += rot[3]! * fx + rot[4]! * fy + rot[5]! * fz;
+      pz += rot[6]! * fx + rot[7]! * fy + rot[8]! * fz;
+      rot = floatMat3Mul(rot, fixedR, 9 * i);
+      const ax = axes[3 * i]!, ay = axes[3 * i + 1]!, az = axes[3 * i + 2]!;
+      worldAxes[3 * i] = rot[0]! * ax + rot[1]! * ay + rot[2]! * az;
+      worldAxes[3 * i + 1] = rot[3]! * ax + rot[4]! * ay + rot[5]! * az;
+      worldAxes[3 * i + 2] = rot[6]! * ax + rot[7]! * ay + rot[8]! * az;
+      pivots[3 * i] = px;
+      pivots[3 * i + 1] = py;
+      pivots[3 * i + 2] = pz;
+      const s = Math.sin(theta[i]!), c = 1.0 - Math.cos(theta[i]!);
       for (let r = 0; r < 3; r++) {
-        const o = 9 * i + 3 * r;
-        const w = dotEinsum3(segR[o]!, segR[o + 1]!, segR[o + 2]!, coms[3 * i + 3]!, coms[3 * i + 4]!, coms[3 * i + 5]!);
-        mc[3 * i + r] = m[i]! * (w + segP[3 * i + r]!);
+        for (let col = 0; col < 3; col++) {
+          const o = 9 * i + 3 * r + col;
+          turn[3 * r + col] = (r === col ? 1.0 : 0.0) + s * k1[o]! + c * k2[o]!;
+        }
       }
+      rot = floatMat3Mul(rot, turn, 0);
+      const cx = coms[3 * i + 3]!, cy = coms[3 * i + 4]!, cz = coms[3 * i + 5]!;
+      const m = Number(this.masses[i + 1]);
+      moments[3 * i] = m * (rot[0]! * cx + rot[1]! * cy + rot[2]! * cz + px);
+      moments[3 * i + 1] = m * (rot[3]! * cx + rot[4]! * cy + rot[5]! * cz + py);
+      moments[3 * i + 2] = m * (rot[6]! * cx + rot[7]! * cy + rot[8]! * cz + pz);
     }
-    const cumM = new Float64Array(n);
-    const cumMc = new Float64Array(3 * n);
+    const out = new Array<number>(n).fill(0.0);
+    let totalM = 0.0, totalX = 0.0, totalY = 0.0, totalZ = 0.0;
     for (let i = n - 1; i >= 0; i--) {
-      cumM[i] = i === n - 1 ? m[i]! : cumM[i + 1]! + m[i]!;
-      for (let r = 0; r < 3; r++) cumMc[3 * i + r] = i === n - 1 ? mc[3 * i + r]! : cumMc[3 * (i + 1) + r]! + mc[3 * i + r]!;
+      // Everything past joint i: mass and first moment; its lever about the pivot, crossed with gravity.
+      totalM += Number(this.masses[i + 1]);
+      totalX += moments[3 * i]!;
+      totalY += moments[3 * i + 1]!;
+      totalZ += moments[3 * i + 2]!;
+      const rx = totalX - totalM * pivots[3 * i]!;
+      const ry = totalY - totalM * pivots[3 * i + 1]!;
+      const rz = totalZ - totalM * pivots[3 * i + 2]!;
+      const ax = worldAxes[3 * i]!, ay = worldAxes[3 * i + 1]!, az = worldAxes[3 * i + 2]!;
+      out[i] = -(ax * (ry * gz - rz * gy) + ay * (rz * gx - rx * gz) + az * (rx * gy - ry * gx)) * this.sign[i]!;
     }
-    const g0 = Number(gravity[0]), g1 = Number(gravity[1]), g2 = Number(gravity[2]);
-    const tau = new Array<number>(n);
-    for (let i = 0; i < n; i++) {
-      const v0 = cumMc[3 * i]! - cumM[i]! * pivots[3 * i]!;
-      const v1 = cumMc[3 * i + 1]! - cumM[i]! * pivots[3 * i + 1]!;
-      const v2 = cumMc[3 * i + 2]! - cumM[i]! * pivots[3 * i + 2]!;
-      const m0 = v1 * g2 - v2 * g1;
-      const m1 = v2 * g0 - v0 * g2;
-      const m2 = v0 * g1 - v1 * g0;
-      tau[i] = -dotEinsum3(axes[3 * i]!, axes[3 * i + 1]!, axes[3 * i + 2]!, m0, m1, m2) * this.sign[i]!;
-    }
-    return tau;
+    return out;
   }
 
   /** Potential energy -sum(m g . c) of the segments after joint 1, J. */

@@ -1118,12 +1118,19 @@ export function seamBlend(q: readonly (readonly number[])[], qFrom: readonly num
   return out;
 }
 
-/** A long pose path (T, 4, 4) solved in chunks of `chunk` ticks, each continuing the one before. */
+/**
+ * A long pose path (T, 4, 4) solved in chunks of `chunk` ticks, each continuing the one before.
+ * `between` is called before each chunk; it may throw to stop the solve.
+ */
 export function solvePath(ik: TrajectoryIK, poses: readonly (readonly (readonly number[])[])[], qLast: readonly number[],
-                          rateHz: number, speedCap: number | null = null, chunk = 64): IKResult {
+                          rateHz: number, speedCap: number | null = null, chunk = 64,
+                          between: (() => void) | null = null): IKResult {
   const stream = new IKStream(ik, qLast, rateHz, speedCap);
   const parts: IKResult[] = [];
-  for (let i = 0; i < poses.length; i += chunk) parts.push(stream.feed(poses.slice(i, i + chunk)));
+  for (let i = 0; i < poses.length; i += chunk) {
+    if (between !== null) between();
+    parts.push(stream.feed(poses.slice(i, i + chunk)));
+  }
   if (!parts.length) throw new ValueError("need at least one array to concatenate");
   return {
     q: parts.flatMap((p) => p.q),
@@ -1137,11 +1144,13 @@ export function solvePath(ik: TrajectoryIK, poses: readonly (readonly (readonly 
 /**
  * `solvePath` without blocking the event loop: the same chunks and numbers, with a pause for the
  * event loop every few milliseconds of computation and `options.signal` checked at each pause.
+ * `options.between` is called before each chunk; it may throw to stop the solve.
  */
 export async function solvePathAsync(ik: TrajectoryIK, poses: readonly (readonly (readonly number[])[])[],
                                      qLast: readonly number[], rateHz: number,
-                                     options: { speedCap?: number | null; chunk?: number } & CooperativeOptions = {}): Promise<IKResult> {
-  const { speedCap = null, chunk = 64 } = options;
+                                     options: { speedCap?: number | null; chunk?: number; between?: (() => void) | null }
+                                       & CooperativeOptions = {}): Promise<IKResult> {
+  const { speedCap = null, chunk = 64, between = null } = options;
   const stream = new IKStream(ik, qLast, rateHz, speedCap);
   const parts: IKResult[] = [];
   const pause = options.pause ?? macrotask;
@@ -1150,6 +1159,7 @@ export async function solvePathAsync(ik: TrajectoryIK, poses: readonly (readonly
       await pause();
       if (options.signal?.aborted) throw options.signal.reason;
     }
+    if (between !== null) between();
     parts.push(await stream.feedAsync(poses.slice(i, i + chunk), { pause, signal: options.signal }));
   }
   if (!parts.length) throw new ValueError("need at least one array to concatenate");

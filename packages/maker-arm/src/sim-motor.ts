@@ -4,7 +4,8 @@
  * A SimMotor answers the frames the SDK sends: MIT commands (an enabled motor jumps to the
  * commanded position when kp > 0), enable/disable/zero/clear, the non-clearing status query and,
  * when `paramsSupported`, parameter reads/writes (run mode, CAN watchdog). `log` records what it
- * received ("status_query", "clear", "enable", "disable", "zero", ["cmd", kp], ["write", index]),
+ * received ("status_query", "clear", "enable", "disable", "zero", ["set_id", new id], ["cmd", kp],
+ * ["write", index]),
  * `frames` every MIT command as [position, kp, tau].
  */
 
@@ -48,7 +49,8 @@ export function feedbackBytes(motorId: number, options: FeedbackOptions = {}): U
 
 /** Kind of a host->motor frame. */
 export type FrameKind =
-  | "command" | "enable" | "disable" | "zero" | "clear" | "status_query" | "param_read" | "param_write" | "other";
+  | "command" | "enable" | "disable" | "zero" | "set_id" | "clear" | "status_query" | "param_read" | "param_write"
+  | "other";
 
 /** [kind, motor id] of a host->motor frame. */
 export function classify(canId: number, data: Uint8Array): [FrameKind, number] {
@@ -58,7 +60,8 @@ export function classify(canId: number, data: Uint8Array): [FrameKind, number] {
   if (data.length >= 6 && PREFIX.every((b, i) => data[i] === b)) {
     const arg = data[6], op = data[7];
     let name: FrameKind | undefined = (
-      { [p.OP_ENABLE]: "enable", [p.OP_DISABLE]: "disable", [p.OP_SET_ZERO]: "zero" } as Record<number, FrameKind>)[op!];
+      { [p.OP_ENABLE]: "enable", [p.OP_DISABLE]: "disable", [p.OP_SET_ZERO]: "zero", [p.OP_SET_ID]: "set_id" } as
+        Record<number, FrameKind>)[op!];
     if (op === p.OP_CLEAR_FAULT) name = arg === 0x00 ? "status_query" : "clear";
     return [name ?? "other", canId];
   }
@@ -117,6 +120,13 @@ export class SimMotor {
   runMode: number;
   canTimeout: number;
   hostId: number;
+  /** N*m and rad/s the motor reports (a held load, a hand moving it). */
+  torque = 0.0;
+  velocity = 0.0;
+  /** false: an id write is taken but the motor keeps its id. */
+  applyIdChange = true;
+  /** The MCU identifier an id write returns (little-endian u64). */
+  uid: Uint8Array;
   log: SimLogEntry[] = [];
   lastKp = 0.0;
   /** Every MIT frame received: [position, kp, tau]. */
@@ -139,6 +149,8 @@ export class SimMotor {
     this.runMode = options.runMode ?? 0;
     this.canTimeout = options.canTimeout ?? 0;
     this.hostId = options.hostId ?? p.HOST_CAN_ID;
+    this.uid = new Uint8Array(8);
+    new DataView(this.uid.buffer).setBigUint64(0, 0x5354524944450000n | BigInt(motorId), true);
   }
 
   get faulted(): boolean {
@@ -156,8 +168,8 @@ export class SimMotor {
 
   feedback(): [number, Uint8Array] {
     return [this.hostId, feedbackBytes(this.motorId, {
-      pos: this.position, temp: this.temperature, mode: this.mode, fault: this.faultFlag, warn: this.warning,
-      params: this.params,
+      pos: this.position, vel: this.velocity, tau: this.torque, temp: this.temperature, mode: this.mode,
+      fault: this.faultFlag, warn: this.warning, params: this.params,
     })];
   }
 
@@ -179,6 +191,11 @@ export class SimMotor {
     if (kind === "status_query") {
       this.log.push("status_query");
       return [[this.hostId, concat(Uint8Array.of(this.motorId), u32le(this.faultWord))]];
+    }
+    if (kind === "set_id") {
+      this.log.push(["set_id", data[6]!]);
+      if (this.applyIdChange && !this.enabled) this.motorId = data[6]!;
+      return [[this.motorId, Uint8Array.from(this.uid)]];
     }
     if (kind !== "command") {
       this.log.push(kind);
@@ -210,8 +227,15 @@ export class SimMotor {
 export function respond(motors: Map<number, SimMotor>, canId: number, data: Uint8Array, extended = false):
     Array<[number, Uint8Array]> {
   if (extended || canId === p.HOST_CAN_ID) return [];
-  const m = motors.get(canId & 0x7f);
-  return m ? m.handle(canId, data) : [];
+  const key = canId & 0x7f;
+  const m = motors.get(key);
+  if (m === undefined) return [];
+  const replies = m.handle(canId, data);
+  if (m.motorId !== key && !motors.has(m.motorId)) {   // an id write moved it
+    motors.delete(key);
+    motors.set(m.motorId, m);
+  }
+  return replies;
 }
 
 /** MockBackend whose responder routes each frame to the SimMotor it addresses. */

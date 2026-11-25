@@ -102,6 +102,9 @@ export function rigSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       expect(rig.cameraId("index:5")).toBe("index:5");
       expect(rig.cameraId("device:abc")).toBe("device:abc");
       expect(rig.cameraId("label:Top Cam")).toBe("label:Top Cam");
+      expect(rig.cameraId("url:http://127.0.0.1:8090/front/stream.mjpg")).toBe("url:http://127.0.0.1:8090/front/stream.mjpg");
+      expect(rig.cameraId("url:https://host/a.jpg")).toBe("url:https://host/a.jpg");
+      expect(() => rig.cameraId("url:ftp://host/x")).toThrow(/no camera named/);
       expect(() => rig.cameraId("side")).toThrow(/cameras: top, left_wrist/);
       expect(rig.camera("top").id).toBe("usb:platform-1.2"); // not opened
       expect(rig.camera("top").isOpen).toBe(false);

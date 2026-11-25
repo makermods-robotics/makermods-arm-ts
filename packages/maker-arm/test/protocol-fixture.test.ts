@@ -48,7 +48,7 @@ describe("RobStride codec matches the Python SDK", () => {
   it("encodes commands", () => {
     const fns: Record<string, (...a: number[]) => p.Frame> = {
       enable: p.encodeEnable, disable: p.encodeDisable, clear_fault: p.encodeClearFault,
-      fault_query: p.encodeFaultQuery, set_zero: p.encodeSetZero, command: p.command,
+      fault_query: p.encodeFaultQuery, set_zero: p.encodeSetZero, set_id: p.encodeSetId, command: p.command,
     };
     for (const c of fixture.commands) check(c, outcome(() => fns[c.fn]!(...c.args)), c);
   });

@@ -11,7 +11,8 @@
  *
  * This energizes the arm and moves it: start it with the arm resting where it may be released,
  * keep the workspace clear and a hand on the power switch. Ctrl-C stops the motion and returns the
- * arm to rest. If the return cannot be verified the arm is left holding, never released in the air.
+ * arm to rest; a second Ctrl-C ends the return where it is and the arm holds. If the return cannot
+ * be verified the arm is left holding at full gains, never released in the air.
  * The adapter must be listed for that product in the rig file (see common.ts).
  */
 
@@ -203,13 +204,16 @@ async function leaveHolding(arm: Arm): Promise<string> {
   return "holding";
 }
 
-/** Return to rest and release torque, or leave the arm holding. Returns the outcome. */
-async function windDown(arm: Arm): Promise<string> {
+/**
+ * Return to rest and release torque, or leave the arm holding. Aborting `signal` (a second
+ * Ctrl-C) ends the return where it is: stop() then leaves the arm holding. Returns the outcome.
+ */
+async function windDown(arm: Arm, signal: AbortSignal): Promise<string> {
   if (arm.state !== ArmState.ENABLED && arm.state !== ArmState.FAULT) return "not_enabled";
   console.log("returning to the rest pose...");
   let verified = false;
   try {
-    verified = await arm.stop();
+    verified = await arm.stop({ signal });
   } catch (e) {
     console.error(`return to rest failed: ${e instanceof Error ? e.message : e}`);
   }
@@ -254,13 +258,21 @@ const arm = new Arm(config, backend);
 console.log(`will enable ${args.product} (${backend.port}) and run a ${a.sine} deg, ${a.period} s sine for ${a.cycles} cycles `
   + `(peak ${deg(peak).toFixed(0)} deg/s), then: rest`);
 
-// Ctrl-C and SIGTERM stop the motion; the arm then returns to rest. Repeating them changes nothing:
-// nothing here releases an arm that is in the air.
+// The first Ctrl-C or SIGTERM stops the motion; the arm then returns to rest. A second one ends the
+// return where it is and the arm keeps holding at full gains. Nothing here releases an arm that is
+// in the air.
 const stop = new AbortController();
+const interruptRest = new AbortController();
 for (const name of ["SIGINT", "SIGTERM"] as const) {
   process.on(name, () => {
-    if (stop.signal.aborted) console.error("already stopping: the arm returns to rest, or keeps holding if that cannot be verified");
-    stop.abort();
+    if (!stop.signal.aborted) {
+      stop.abort();
+    } else if (!interruptRest.signal.aborted) {
+      console.error("interrupted again: the return to rest stops here and the arm keeps holding");
+      interruptRest.abort();
+    } else {
+      console.error("already stopping: the arm keeps holding");
+    }
   });
 }
 
@@ -285,7 +297,7 @@ try {
   failure = e;
 } finally {
   try {
-    then = await windDown(arm);
+    then = await windDown(arm, interruptRest.signal);
   } catch (e) {
     console.error(`wind-down failed: ${e instanceof Error ? e.message : e}`);
     then = "failed";

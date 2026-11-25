@@ -31,6 +31,15 @@ export function configSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
       approx(cfg.startupStep, radians(2.0));
     });
 
+    it("rest_window_deg is read in degrees and must be positive", () => {
+      const joints = [{ motor_id: ID_LO, limits_deg: [-90, 45], kp: 10, kd: 1 }];
+      expect(ArmConfig.fromRaw({ joints }, PRODUCT).restWindow).toBe(null);
+      approx(ArmConfig.fromRaw({ rest_window_deg: 12, joints }, PRODUCT).restWindow!, radians(12));
+      for (const bad of [0, -1]) {
+        expect(() => ArmConfig.fromRaw({ rest_window_deg: bad, joints }, PRODUCT)).toThrow(/restWindow must be >0/);
+      }
+    });
+
     it("unknown field is reported", () => {
       const raw = { wire_protocol: "private", joints: [] };
       expect(() => ArmConfig.fromRaw(raw, PRODUCT)).toThrow(ValueError);

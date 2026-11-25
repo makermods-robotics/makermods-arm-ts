@@ -36,11 +36,15 @@ button.onclick = async () => {
 ```
 
 `arm.setJointTargets(q)` stores a target; the arm's own loop limits and sends it. `arm.estop()`
-releases torque at once.
+releases torque at once. `arm.stop()` releases torque only after a verified return to rest and a
+fresh recheck of the pose; otherwise, or when its `signal` is aborted (`stop({ signal })`), it
+resolves false with the arm holding at full gains.
 
 The control loop runs on the thread the arm was created on. Keep long synchronous work off that
-thread (use the `...Async` IK solves, or run the arm in a Web Worker): a pause longer than the
-profile's feedback timeout (0.25 s) faults the arm, which then holds.
+thread (use the `...Async` IK solves, or run the arm in a Web Worker): while it runs no frames go
+out and the motors hold their last command; the next tick moves the commands by the time that
+passed, at most four periods. `arm.loopRateHz` (also in `status()`) shows the rate the loop keeps,
+and a warning is logged once per session when it stays below 90 % of the profile's rate.
 
 ## In Node
 
@@ -76,8 +80,8 @@ await new Teleop(leader, arm).run(abort.signal);  // the follower tracks the lea
 ```
 
 Also in every arm package: `ArmLeader` (a second arm moved by hand as leader), `SlcanSerialBackend`
-(USB-serial CAN adapters over Web Serial), `Camera` (`getUserMedia` with frame ages and
-`frame.toJpeg()`).
+(USB-serial CAN adapters over Web Serial), `Camera` (`getUserMedia`, or a `url:` camera another
+program serves as MJPEG over HTTP, with frame ages and `frame.toJpeg()`).
 
 ## Without hardware
 

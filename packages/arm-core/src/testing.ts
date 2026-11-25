@@ -289,17 +289,18 @@ export async function simulatedGroup<M extends SimulatedMotor, O>(simulation: Si
 }
 
 /**
- * Each control tick of `arm` advances its commands by the time since the previous tick, between
- * one and SIM_MAX_TICK_PERIODS periods.
+ * Each control tick of `arm` advances its commands by the time since the previous tick, at most
+ * SIM_MAX_TICK_PERIODS periods.
  */
 function followTheClock(arm: Arm): void {
   const tick = arm["tick"].bind(arm);
   let last: number | null = null;
+  const period = 1.0 / arm.config.controlRateHz;
   arm["tick"] = (dt: number, session: number | null = null): Promise<void> => {
     const now = arm.clock.now();
     const elapsed = last === null ? dt : now - last;
     last = now;
-    return tick(Math.min(Math.max(dt, elapsed), SIM_MAX_TICK_PERIODS * dt), session);
+    return tick(Math.min(Math.max(0.0, elapsed), SIM_MAX_TICK_PERIODS * period), session);
   };
 }
 

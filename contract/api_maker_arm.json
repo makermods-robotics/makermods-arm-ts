@@ -151,7 +151,8 @@
       ],
       "set_id": [
        "new_id",
-       "timeout"
+       "timeout",
+       "torque_off_confirmed"
       ],
       "set_zero": [],
       "validate": [
@@ -216,9 +217,12 @@
     "DEFAULT_HOST_ID",
     "DEFAULT_MODEL",
     "ID_RANGE",
+    "ID_SETTLE_S",
     "KD_RANGE",
     "KP_RANGE",
-    "MODELS"
+    "MODELS",
+    "SET_ID_MAX_TORQUE_NM",
+    "SET_ID_MAX_VELOCITY"
    ],
    "functions": {
     "route": [
@@ -308,6 +312,7 @@
     "OP_CLEAR_FAULT",
     "OP_DISABLE",
     "OP_ENABLE",
+    "OP_SET_ID",
     "OP_SET_ZERO",
     "RS00",
     "RS02"
@@ -342,6 +347,10 @@
     "encode_read_param": [
      "motor_id",
      "index"
+    ],
+    "encode_set_id": [
+     "motor_id",
+     "new_id"
     ],
     "encode_set_zero": [
      "motor_id"
@@ -388,6 +397,7 @@
       "config",
       "fault_reason",
       "fault_reasons",
+      "loop_rate_hz",
       "motors",
       "rest_pose",
       "unconfirmed_disable"
@@ -395,6 +405,7 @@
      "constants": [
       "FLOAT_KD",
       "PARAM_TIMEOUT",
+      "PLAN_IN_HELPER",
       "REPLY_ATTEMPTS",
       "REPLY_TIMEOUT"
      ],
@@ -472,7 +483,9 @@
       "set_motor_id": [
        "old",
        "new",
-       "timeout"
+       "timeout",
+       "torque_off_confirmed",
+       "replacing"
       ],
       "set_zero": [
        "indices"
@@ -503,7 +516,16 @@
    "constants": [
     "EE_ANGLE_TOL",
     "EE_MIN_SECONDS",
-    "EE_POSITION_TOL"
+    "EE_POSITION_TOL",
+    "FRAME_SPACING_S",
+    "HEIGHT_JOINT_M_PER_RAD",
+    "LOOP_RATE_WINDOW_S",
+    "MAX_TICK_PERIODS",
+    "REST_FRESH_S",
+    "REST_PRESS",
+    "REST_PRESS_NM",
+    "REST_RECHECK",
+    "SLOW_LOOP_SHARE"
    ],
    "functions": {}
   },
@@ -574,7 +596,9 @@
       ]
      },
      "properties": [
-      "is_open"
+      "frames",
+      "is_open",
+      "skipped"
      ]
     },
     "CameraInfo": {
@@ -600,14 +624,29 @@
     }
    },
    "constants": [
+    "MAX_FRAME_BYTES",
+    "MAX_HEADERS",
+    "MAX_LINE_BYTES",
     "READ_FAILURE_S",
     "REOPEN_S",
+    "URL_READ_WAIT_S",
+    "URL_SCHEMES",
+    "URL_TIMEOUT_S",
     "V4L_BY_PATH",
     "V4L_SYSFS"
    ],
    "functions": {
+    "is_camera_id": [
+     "text"
+    ],
     "list_cameras": [],
     "resolve": [
+     "camera_id"
+    ],
+    "url_camera_info": [
+     "camera_id"
+    ],
+    "url_of": [
      "camera_id"
     ]
    }
@@ -644,6 +683,7 @@
       "rest_timeout",
       "rest_arrived",
       "rest_settle",
+      "rest_window",
       "rest_stall_improvement",
       "rest_stall_polls",
       "joints"
@@ -724,6 +764,12 @@
      "properties": []
     },
     "ParamTimeout": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "RouteUnverified": {
      "constants": [],
      "fields": [],
      "methods": {},
@@ -1482,7 +1528,8 @@
      "q_last",
      "rate_hz",
      "speed_cap",
-     "chunk"
+     "chunk",
+     "between"
     ],
     "straight_line": [
      "start",

@@ -4,8 +4,9 @@
  * Per joint the torque that holds the arm still at a pose (`Chain.gravityTorques`), times the
  * profile's overall `gravityScale` and the joint's `gravityFactor` (a per-joint correction for mass
  * the URDF does not describe: cabling, gearboxes), eased in after torque-on and capped per joint at
- * `gravityLimitNm`. Angles and torques are joint coordinates (rad, N*m). The torques agree with
- * the Python SDK's to a few units in the last place (see kinematics.ts).
+ * `gravityLimitNm`. Angles and torques are joint coordinates (rad, N*m). The torques are the Python
+ * SDK's bit for bit except where `Math.sin` / `Math.cos` differ from the C library's in the last
+ * bit; then they agree to a few units in the last place (see kinematics.ts).
  */
 
 import type { ArmConfig } from "./config.js";

@@ -96,7 +96,12 @@ export interface Motor {
   healthProblem(): string | null;
   clearFault(): Promise<void>;
   setZero(): Promise<void>;
-  setId(newId: number, timeout?: number): Promise<void>;
+  /**
+   * Change the motor's CAN ID (persistent). Refused unless a fresh read shows the motor
+   * de-energized; where the firmware cannot report torque state, only with `torqueOffConfirmed`
+   * from a caller who made sure it is. Refused when anything answers on `newId`.
+   */
+  setId(newId: number, timeout?: number, torqueOffConfirmed?: boolean): Promise<void>;
   /** Arm the motor-side watchdog; the token restores the previous setting (null: nothing to restore). */
   armWatchdog(timeoutMs: number, timeout?: number): Promise<unknown>;
   restoreWatchdog(token: unknown, timeout?: number): Promise<void>;

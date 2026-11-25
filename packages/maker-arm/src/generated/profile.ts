@@ -17,6 +17,7 @@ export const PROFILE: RawProfile = {
   "max_velocity": 5.0,
   "limit_margin": 0.0,
   "feedback_timeout": 0.25,
+  "rest_window_deg": 12,
   "fault_poll_interval": 0.25,
   "urdf_base_rpy_deg": [
     90,

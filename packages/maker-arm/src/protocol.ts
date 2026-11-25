@@ -5,7 +5,8 @@
  * the host ID (0xFD) with the motor ID in payload byte 0; typed parameter replies arrive on
  * 0x300|id (read) or 0x400|id (write).
  *
- * Sources: RobStride RS00/RS02 manuals 260713 section 6; LeRobot RobStride driver
+ * Sources: RobStride RS00/RS02 manuals 260713 section 6 (command 7, modify motor CAN ID, as in the RS04
+ * manual); LeRobot RobStride driver
  * (makermods-robotics/lerobot@5ce2fe41a); MakerModsLab maker_fault_diagnostics.py and
  * maker_gripper_hold.py.
  */
@@ -73,6 +74,8 @@ export const CAN_TIMEOUT_TICKS_PER_MS = 20;
 
 // Command opcodes (payload byte 7 after six 0xFF bytes).
 /** Byte 6 = 0xFF clears faults and returns feedback; 0x00 reads faults only. */
+/** byte 6 = the new motor ID; answered with the MCU identifier on the motor ID. */
+export const OP_SET_ID = 0xfa;
 export const OP_CLEAR_FAULT = 0xfb;
 export const OP_ENABLE = 0xfc;
 export const OP_DISABLE = 0xfd;
@@ -140,6 +143,11 @@ export function encodeFaultQuery(motorId: number): Frame {
 
 export function encodeSetZero(motorId: number): Frame {
   return command(motorId, OP_SET_ZERO);
+}
+
+/** Change the motor answering on `motorId` to `newId` (manual section 6, command 7). */
+export function encodeSetId(motorId: number, newId: number): Frame {
+  return command(motorId, OP_SET_ID, checkId(newId));
 }
 
 /** Python's round(): nearest integer, ties to even. */

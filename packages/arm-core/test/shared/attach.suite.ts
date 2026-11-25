@@ -73,6 +73,79 @@ export function attachSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     }
   }
 
+  describe("attach gravity at takeover (TypeScript only)", () => {
+    /** Attach `arm` to the arm a previous session left holding; the first frame's torque to shoulder_lift. */
+    async function firstLiftTorque(mode: "full" | "ramp" | undefined, prepare?: (sim: Sim, arm: Arm) => void):
+        Promise<{ tau: number; full: number; arm: Arm }> {
+      const clock = new VirtualClock();
+      const [sim, backend] = await leftEnergized(clock);
+      let arm = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
+      arm.PARAM_TIMEOUT = 0.005;
+      if (sim.motor("gripper").faulted) {
+        await expect(arm.connect()).rejects.toThrow(ConnectError);
+        arm = new Arm(sim.config, backend, { clock, frameSpacing: 0, logger: new RecordingLogger(), attachGravity: mode });
+        arm.PARAM_TIMEOUT = 0.005;
+      }
+      await arm.connect(false, true);
+      prepare?.(sim, arm);
+      const lift = sim.config.joints.findIndex((j) => j.name === "shoulder_lift");
+      const model = arm["gravity"] ?? null;
+      expect(model).toBeNull(); // built by attach()
+      clearLogs(sim);
+      await arm.attach();
+      expect(await waitFor(() => sim.motor("shoulder_lift").frames.length >= 1, clock)).toBe(true);
+      const g = arm["gravity"]!;
+      const q = arm.getJointPositions().slice(0, g.n);
+      const limit = g.limitsNm[lift]!;
+      const full = Math.max(-limit, Math.min(limit, g.model(q)[lift]!)) * sim.config.joints[lift]!.direction;
+      return { tau: sim.motor("shoulder_lift").frames[0]![2], full, arm };
+    }
+
+    it("keeps full gravity feed-forward when every chain joint reports torque on (default)", async () => {
+      const { tau, full, arm } = await firstLiftTorque(undefined);
+      try {
+        expect(Math.abs(full)).toBeGreaterThan(0.5); // a loaded joint
+        expect(Math.abs(tau - full)).toBeLessThan(0.05);
+      } finally {
+        await arm.disable();
+      }
+    });
+
+    it("eases gravity in with attachGravity: ramp, as the Python SDK does", async () => {
+      const { tau, full, arm } = await firstLiftTorque("ramp");
+      try {
+        expect(Math.abs(full)).toBeGreaterThan(0.5);
+        expect(Math.abs(tau)).toBeLessThan(0.1); // level 0 (one torque step of rounding)
+      } finally {
+        await arm.disable();
+      }
+    });
+
+    it("keeps the ease-in when a chain joint reports torque off or no torque state", async () => {
+      for (const state of ["off", "unknown"] as const) {
+        let applies = true;
+        const { tau, full, arm } = await firstLiftTorque(undefined, (sim, a) => {
+          const i = sim.config.joints.findIndex((j) => j.name === "elbow_flex");
+          if (state === "off") {
+            sim.motor("elbow_flex").enabled = false; // lying on its support, say
+          } else if ("paramsSupported" in a.motors[i]!) {
+            (a.motors[i] as unknown as { paramsSupported: boolean }).paramsSupported = false; // firmware without torque state
+          } else {
+            applies = false; // this product's motors always report torque state
+          }
+        });
+        try {
+          if (!applies) continue;
+          expect(Math.abs(full)).toBeGreaterThan(0.5);
+          // still easing in: the first tick comes a few tens of ms after attach() starts the ramp
+          expect(Math.abs(tau), `torque state ${state}`).toBeLessThan(0.2 * Math.abs(full));
+        } finally {
+          await arm.disable();
+        }
+      }
+    });
+  });
+
   describe("attach", () => {
     it("attach takes over without a sag and rests only on an explicit target", async () => {
       const clock = new VirtualClock();

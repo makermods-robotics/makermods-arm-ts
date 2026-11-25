@@ -31,6 +31,32 @@ same behaviour, the same frames on the CAN bus. The Python code is the specifica
 - All time comes from the injected `Clock` (`clock.now()`, `clock.sleep()`, `clock.timer()`), never
   from `Date`, `performance` or `setTimeout` directly, so every test runs on `VirtualClock`.
 
+## Intended differences
+
+- `move_ee` path planning: the Python SDK solves the path in a helper process (`_planner.py`) so the
+  solve never holds the interpreter lock its control loop needs. `Arm.moveEe` solves it
+  cooperatively on the event loop (`Chain.ikAsync`, `solvePathAsync`, `planner.ts`), pausing every
+  few milliseconds of computation. The limits, refusals and return values are the Python SDK's: 5 s
+  for the end pose, then 3 s plus 25 ms per path tick, never more than 60 s; a path longer than
+  12000 ticks is refused before it is built; `timeout` and `signal` apply while it plans. The budget
+  is checked at every pause instead of by a waiting caller. There is no helper to start, kill or
+  fall back from (`Arm.PLAN_IN_HELPER` has no counterpart).
+- `realtime.py` (pinning the control loop and receive threads to the fast cores of a big.LITTLE
+  CPU, and the GIL switch interval) has no JavaScript counterpart: the control loop shares the
+  event loop with everything else on its thread.
+- A second Ctrl-C during `stop()` (a `KeyboardInterrupt` raised inside it) is `stop({ signal })`:
+  aborting the signal ends the return to rest, or the recheck before the release, and `stop()`
+  resolves false with the arm holding at full gains, as the Python `stop()` leaves it before the
+  interrupt propagates.
+- `attach()` gravity: the Python SDK eases the new session's gravity feed-forward in from zero over
+  `RAMP_S`, so a loaded joint the previous owner was holding dips for half a second at takeover
+  (about 3.5 deg on a Metal elbow). With `ArmOptions.attachGravity: "full"` (the default) the
+  feed-forward starts at full level when every joint of the gravity chain reports torque on; it is
+  still eased in when any of them reports torque off or no torque state. `"ramp"` is the Python
+  behaviour (the frame replay uses it). The Python SDK should get the same change.
+- Frame spacing: Python busy-waits `FRAME_SPACING_S` start to start; TypeScript sleeps the same gap
+  on its clock (a RealClock spins the last stretch of a short sleep).
+
 ## Bytes and numbers
 
 - Frames are `Uint8Array`. No `Buffer` and no `node:` imports outside files named `node.ts`.

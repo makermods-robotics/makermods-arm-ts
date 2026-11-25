@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { type ArmConfigInit, ArmState, ConnectError, StateError, ValueError } from "@makermods/arm-core";
 import { VirtualClock } from "@makermods/arm-core/testing";
-import { type ArmFakes, commands, type FakeMotorLike, type FakeMotorOptions, waitFor } from "./fakes.js";
+import { type ArmFakes, commands, type FakeMotorLike, type FakeMotorOptions, type Made, waitFor } from "./fakes.js";
 
 /** Registers the shared tests on `fk`'s arm. */
 export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
@@ -314,6 +314,161 @@ export function armSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
         fakes[1]!.online = false; // at rest, but its last reading is still within feedbackTimeout
         expect(await arm.stop()).toBe(false);
         expect([ArmState.ENABLED, ArmState.FAULT]).toContain(arm.state);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("a stalled loop does not release on a reading from before the stall", async () => {
+      // The motors answered after the return began, then the loop stalled: nothing is unanswered,
+      // but the readings are old. Release needs a reading younger than feedbackTimeout.
+      const { arm, fakes, clock } = make(null, fastRest({ restTimeout: 0.6 }));
+      await arm.connect();
+      await arm.enable();
+      let stalled = false;
+      const tick = arm["tick"].bind(arm), wait = arm["waitTicks"].bind(arm);
+      arm["tick"] = async (dt: number, session: number | null = null) => {
+        if (stalled) {
+          await clock.sleep(0.01); // the loop runs late and sends nothing
+          return;
+        }
+        return tick(dt, session);
+      };
+      arm["waitTicks"] = async (n: number, timeout = 1.0) => {
+        const ok = await wait(n, timeout);
+        stalled = true;
+        await clock.sleep(0.4);
+        return ok;
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect([ArmState.ENABLED, ArmState.FAULT]).toContain(arm.state);
+        expect(fakes[1]!.enabled).toBe(true);
+      } finally {
+        stalled = false;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("a return to rest overtaken by an e-stop and an enable writes nothing into the new session", async () => {
+      const { arm, clock } = make(null, { restSpeed: radians(20), restRateHz: 200, restTimeout: 3.0 });
+      await arm.connect();
+      await arm.enable();
+      try {
+        arm["synced"] = [true, true];
+        expect(await arm.moveTo([1.2, -0.5], { timeout: 3.0 })).toBe(true);
+        const returning = arm.returnToRest();
+        await clock.sleep(0.05); // the return is ramping
+        const overtaken = (async () => {
+          await arm.estop();
+          await arm.enable();
+          return arm.getCommandedPositions();
+        })();
+        expect(await returning).toBe(false);
+        const held = await overtaken;
+        await clock.sleep(0.1);
+        approxAll(arm["userTargets"], held, 1e-6);
+        expect(arm["returning"]).toBe(false);
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    /** The loop runs and the last frame to the returned joint carries the profile's kp. */
+    async function holdingAtFullGains(arm: Made["arm"], fake: FakeMotorLike, clock: VirtualClock): Promise<boolean> {
+      await clock.sleep(0.05);
+      const last = fake.frames[fake.frames.length - 1];
+      return arm["running"] && arm["loop"] !== null && arm["loop"].alive && last !== undefined
+        && Math.abs(last[1] - arm.config.joints[0]!.kp) <= 0.2;
+    }
+
+    it("an interrupted return (a second Ctrl-C) leaves the arm holding at full gains", async () => {
+      const { arm, fakes, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      try {
+        arm["synced"] = [true, true];
+        expect(await arm.moveTo([1.0, -0.5], { timeout: 3.0 })).toBe(true);
+        const interrupt = new AbortController();
+        clock.timer(0.02, () => interrupt.abort());
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(arm["returning"]).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(await holdingAtFullGains(arm, fakes[1]!, clock)).toBe(true);
+        expect(arm.setJointTargets([0.9, -0.5])).toBe(true); // it takes targets again
+      } finally {
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("an interrupt just before the release leaves the arm holding at full gains", async () => {
+      const { arm, fakes, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const interrupt = new AbortController();
+      const tick = arm["tick"].bind(arm);
+      arm["tick"] = (dt: number, session: number | null = null) => {
+        if (session === null) interrupt.abort(); // stop()'s own reading after the loop stopped
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop({ signal: interrupt.signal })).toBe(false);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(arm["returning"]).toBe(false);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(await holdingAtFullGains(arm, fakes[1]!, clock)).toBe(true);
+      } finally {
+        arm["tick"] = tick;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("stop rechecks the pose after the loop stops and holds if it moved", async () => {
+      const { arm, fakes, clock } = make(null, fastRest());
+      await arm.connect();
+      await arm.enable();
+      const tick = arm["tick"].bind(arm);
+      let moved = false;
+      arm["tick"] = (dt: number, session: number | null = null) => {
+        if (session === null && !moved && arm.state === ArmState.ENABLED) {
+          moved = true;
+          fakes[1]!.track = false;
+          fakes[1]!.position += 0.1; // nudged while the loop was stopping
+        }
+        return tick(dt, session);
+      };
+      try {
+        expect(await arm.stop()).toBe(false);
+        expect(moved).toBe(true);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(arm["returning"]).toBe(false);
+        expect(await holdingAtFullGains(arm, fakes[1]!, clock)).toBe(true);
+      } finally {
+        arm["tick"] = tick;
+        await arm.disable();
+        await arm.disconnect();
+      }
+    });
+
+    it("stop does not release when no joint returns to rest", async () => {
+      const joints = twoJointConfig().joints.map((j) => j.replace({ returnToRest: false }));
+      const { arm, fakes } = make(null, fastRest({ joints }));
+      await arm.connect();
+      await arm.enable();
+      try {
+        arm["synced"] = [true, true];
+        expect(await arm.moveTo([1.0, -0.5], { timeout: 3.0 })).toBe(true); // raised, and nothing will bring it back
+        expect(await arm.stop()).toBe(false);
+        expect(arm.state).toBe(ArmState.ENABLED);
+        expect(fakes[1]!.enabled).toBe(true);
+        expect(arm["returning"]).toBe(false);
       } finally {
         await arm.disable();
         await arm.disconnect();

@@ -2,14 +2,15 @@ export { type Clock, Mutex, RealClock, type RealClockOptions, Signal } from "./c
 export {
   ArmConfig, type ArmConfigInit, checkGains, degrees, JointConfig, type JointConfigInit, radians, type RawProfile,
 } from "./config.js";
-export { ArmError, ConnectError, FaultLatched, ParamTimeout, StateError, TimeoutError, ValueError } from "./errors.js";
+export { ArmError, ConnectError, FaultLatched, ParamTimeout, RouteUnverified, StateError, TimeoutError, ValueError } from "./errors.js";
 export { ArmState } from "./state.js";
 export type { Motor, MotorFeedback, MotorStatus, ParamSpec, Product } from "./motor.js";
 export { CanBackend, type RecvCallback } from "./transport/base.js";
 export { MockBackend, type Responder } from "./transport/mock.js";
 export {
-  Arm, type ArmOptions, type ArmStatus, EE_ANGLE_TOL, EE_MAX_SECONDS, EE_MIN_SECONDS, EE_POSITION_TOL, type EnableOptions, type ExtraTorque,
-  FRAME_SPACING, type JointStatus, type Logger, type MoveEeOptions, type MoveOptions,
+  Arm, type ArmOptions, type ArmStatus, EE_ANGLE_TOL, EE_MIN_SECONDS, EE_POSITION_TOL, type EnableOptions, type ExtraTorque,
+  FRAME_SPACING, FRAME_SPACING_S, HEIGHT_JOINT_M_PER_RAD, type JointStatus, type Logger, LOOP_RATE_WINDOW_S, MAX_TICK_PERIODS,
+  type MoveEeOptions, type MoveOptions, REST_FRESH_S, REST_PRESS, REST_PRESS_NM, REST_RECHECK, type SetMotorIdOptions, SLOW_LOOP_SHARE, type StopOptions,
 } from "./arm.js";
 export {
   Bus, type BusRow, jointPosition, release, RELEASE_ATTEMPTS, RELEASE_REPLY_S, releaseMotor, type ReleaseResult,
@@ -66,7 +67,9 @@ export {
 } from "./rig.js";
 export {
   browserFrames, Camera, type CameraId, type CameraInfo, type CameraOptions, cameraConstraints, cameraStartError,
-  type CanvasFactory, type CanvasLike, type CaptureMode, captureModes, encodeJpeg, FALLBACK_MODES, Frame, type FrameReader,
-  listCameras, type MediaDeviceInfoLike, type MediaDevicesLike, type MediaStreamLike, type MediaStreamTrackLike, parseCameraId,
-  READ_FAILURE_S, REOPEN_S, resolveCamera, type VideoFrameLike, WATCH_S,
+  type CanvasFactory, type CanvasLike, type CaptureMode, captureModes, decodeJpeg, encodeJpeg, FALLBACK_MODES,
+  type FetchLike, type FetchResponseLike, Frame, type FrameReader, HttpCapture, type HttpCaptureOptions, isCameraId,
+  type JpegDecoder, JpegImage, jpegSize, listCameras, MAX_FRAME_BYTES, MAX_HEADERS, MAX_LINE_BYTES, type MediaDeviceInfoLike,
+  type MediaDevicesLike, type MediaStreamLike, type MediaStreamTrackLike, parseCameraId, READ_FAILURE_S, REOPEN_S,
+  resolveCamera, URL_READ_WAIT_S, URL_SCHEMES, URL_TIMEOUT_S, urlCameraInfo, urlOf, type VideoFrameLike, WATCH_S,
 } from "./cameras.js";
