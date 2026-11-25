@@ -7,7 +7,8 @@ export * from "@makermods/arm-core";
 export * as protocol from "./protocol.js";
 export { MAKER_ARM } from "./product.js";
 export {
-  DEFAULT_HOST_ID, DEFAULT_MODEL, ID_RANGE, KD_RANGE, KP_RANGE, MODELS, PARAMS, type RobStrideFeedback, RobStrideMotor, route,
+  DEFAULT_HOST_ID, DEFAULT_MODEL, ID_RANGE, ID_SETTLE_S, KD_RANGE, KP_RANGE, MODELS, PARAMS, type RobStrideFeedback,
+  RobStrideMotor, route, SET_ID_MAX_TORQUE_NM, SET_ID_MAX_VELOCITY,
 } from "./motor.js";
 
 /**

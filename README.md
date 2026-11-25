@@ -36,11 +36,18 @@ button.onclick = async () => {
 ```
 
 `arm.setJointTargets(q)` stores a target; the arm's own loop limits and sends it. `arm.estop()`
-releases torque at once.
+releases torque at once. `arm.stop()` releases torque only after a verified return to rest and a
+fresh recheck of the pose, and resolves true only once every motor confirmed torque off; otherwise,
+or when its `signal` is aborted (`stop({ signal })`), it resolves false with the arm holding at the
+profile's gains. A release some motor did not confirm resolves false with the arm CONNECTED and
+those motors in `arm.unconfirmedDisable`.
 
-The control loop runs on the thread the arm was created on. Keep long synchronous work off that
-thread (use the `...Async` IK solves, or run the arm in a Web Worker): a pause longer than the
-profile's feedback timeout (0.25 s) faults the arm, which then holds.
+The control loop runs on the thread the arm was created on. An application must not block that
+thread's event loop while an arm is enabled (use the `...Async` IK solves, or run the arm in a Web
+Worker): while it is blocked no frames go out and the motors hold their last command; the next tick
+is late and moves the commands by the time that passed, at most four periods. That is not a fault
+by itself, and a write or reply that completed during the stall is not taken for a timeout. `arm.loopRateHz` (also in `status()`) shows the rate the loop keeps,
+and a warning is logged once per session when it stays below 90 % of the profile's rate.
 
 ## In Node
 
@@ -76,8 +83,8 @@ await new Teleop(leader, arm).run(abort.signal);  // the follower tracks the lea
 ```
 
 Also in every arm package: `ArmLeader` (a second arm moved by hand as leader), `SlcanSerialBackend`
-(USB-serial CAN adapters over Web Serial), `Camera` (`getUserMedia` with frame ages and
-`frame.toJpeg()`).
+(USB-serial CAN adapters over Web Serial), `Camera` (`getUserMedia`, or a `url:` camera another
+program serves as MJPEG over HTTP, with frame ages and `frame.toJpeg()`).
 
 ## Without hardware
 

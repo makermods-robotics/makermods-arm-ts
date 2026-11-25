@@ -14,8 +14,8 @@
  * was acknowledged on the bus. Bit timing at an 87.5 % sample point, prop_seg 1.
  */
 
-import { type Clock, RealClock, Mutex, Signal } from "../clock.js";
-import { ConnectError, TimeoutError, ValueError } from "../errors.js";
+import { boundAfterIo, type Clock, Mutex, RealClock, Signal, yieldToIo } from "../clock.js";
+import { ConnectError, notSubmitted, TimeoutError, ValueError } from "../errors.js";
 import { CanBackend } from "./base.js";
 
 /** Vendor/product ids the Linux gs_usb driver binds (candleLight and compatibles), as WebUSB filters. */
@@ -81,6 +81,9 @@ export interface UsbControlSetup {
  * The parts of WebUSB's USBDevice this transport uses. A browser USBDevice, the `usb` package's
  * WebUSBDevice and FakeGsUsbDevice all fit.
  */
+/** s past a native USB transfer timeout before the JavaScript backstop reports the write failed. */
+export const NATIVE_BACKSTOP_S = 0.5;
+
 export interface UsbDeviceLike {
   readonly vendorId: number;
   readonly productId: number;
@@ -96,6 +99,11 @@ export interface UsbDeviceLike {
    * no timeout; releasing the interface ends them.
    */
   readonly readsTimeOut?: boolean;
+  /**
+   * The native timeout (ms) the platform applies to a bulk OUT transfer, where there is one (the
+   * `usb` package in Node); undefined in a browser, where WebUSB transfers have none.
+   */
+  readonly nativeTransferTimeoutMs?: number;
   open(): Promise<void>;
   close(): Promise<void>;
   selectConfiguration(configurationValue: number): Promise<void>;
@@ -333,7 +341,7 @@ export class GsUsbBackend extends CanBackend {
    * What went wrong in the last close (or in the cleanup of a failed open): a channel stop or a
    * device close that failed, so the adapter's channel may still be running. Null when clean; reset by open().
    */
-  closeError: string | null = null;
+  override closeError: string | null = null;
   /** Error frames the adapter reported. */
   errorFrames = 0;
   /** Received frames flagged as following frames the adapter dropped. */
@@ -380,16 +388,15 @@ export class GsUsbBackend extends CanBackend {
     return this.#session !== null;
   }
 
-  /** A USB transfer bound in time like the Python SDK's (at least 1 ms). WebUSB cannot cancel the transfer itself. */
+  /**
+   * A USB transfer bound in time like the Python SDK's (at least 1 ms). WebUSB cannot cancel the
+   * transfer itself. The bound is checked only after pending I/O has been delivered (boundAfterIo):
+   * a stalled event loop delays it, it does not turn a completed transfer into a timeout. In Node
+   * the native endpoint timeout is the authoritative bound of a bulk transfer and this a backstop.
+   */
   #bounded<T>(work: Promise<T>, seconds: number, what: string): Promise<T> {
     const ms = Math.max(1, Math.ceil(seconds * 1000));
-    return new Promise<T>((resolve, reject) => {
-      const cancel = this.clock.timer(ms / 1000, () => reject(new BoundExpired(`${what} timed out after ${ms} ms`)));
-      work.then(
-        (v) => (cancel(), resolve(v)),
-        (e) => (cancel(), reject(e)),
-      );
-    });
+    return boundAfterIo(this.clock, work, ms / 1000, () => new BoundExpired(`${what} timed out after ${ms} ms`));
   }
 
   async #control(dev: UsbDeviceLike, request: number, data: Uint8Array<ArrayBuffer>, what: string): Promise<void> {
@@ -485,6 +492,7 @@ export class GsUsbBackend extends CanBackend {
         new Promise<void>((resolve) => (cancel = this.clock.timer(1.0 + this.ioTimeout, resolve))),
       ]);
       cancel();
+      await yieldToIo(this.clock); // completions already pending count before the verdict
     }
     if (unresolved.size) {
       throw new ConnectError(
@@ -626,17 +634,19 @@ export class GsUsbBackend extends CanBackend {
     this.#inFlight.notify();
   }
 
+  /** Raised before any transfer: the frame was certainly not sent (`submitted` false). */
   #notOpen(): ConnectError {
-    return new ConnectError(`${this.port} is not open` + (this.error ? ` (${this.error})` : ""));
+    return notSubmitted(new ConnectError(`${this.port} is not open` + (this.error ? ` (${this.error})` : "")));
   }
 
+  /** Raised while waiting for a free transmit slot, before any transfer: `submitted` false. */
   #capReached(session: Session): TimeoutError {
-    return new TimeoutError(
+    return notSubmitted(new TimeoutError(
       `${this.port}: ${session.pending.size} frames were never acknowledged on the CAN bus; ` +
         "stopped writing to protect the adapter. Check that the motors are powered and " +
         "the CAN wiring and bitrate are right, then reconnect" +
         (this.error ? ` (receive had stopped: ${this.error})` : ""),
-    );
+    ));
   }
 
   /**
@@ -695,7 +705,13 @@ export class GsUsbBackend extends CanBackend {
       );
       let written: OutResult;
       try {
-        written = await this.#bounded(outcome, Math.max(0, deadline - this.clock.now()), "USB write");
+        // Where the platform bounds the transfer itself (Node), that native timeout is the deadline and
+        // this one only a backstop past it, so a descheduled process cannot report a timeout for a
+        // transfer that completed. In a browser this is the only bound on the transfer. (The wait for
+        // a free transmit slot above is bounded by ioTimeout either way.)
+        const native = session.dev.nativeTransferTimeoutMs;
+        const bound = native === undefined ? Math.max(0, deadline - this.clock.now()) : native / 1000 + NATIVE_BACKSTOP_S;
+        written = await this.#bounded(outcome, bound, "USB write");
       } catch (e) {
         throw new TimeoutError(`${this.port}: USB write failed (${reason(e)}); the adapter may need unplugging and replugging`, { cause: e });
       }

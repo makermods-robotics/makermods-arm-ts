@@ -10,7 +10,8 @@
 
 import {
   ArmError, type CanBackend, type Clock, ConnectError, FaultLatched, type JointConfig, type Logger, type Motor,
-  type MotorFeedback, type MotorStatus, Mutex, type ParamSpec, ParamTimeout, Signal, ValueError,
+  type MotorFeedback, type MotorStatus, Mutex, type ParamSpec, ParamTimeout, RouteUnverified, Signal, StateError,
+  ValueError,
 } from "@makermods/arm-core";
 import * as protocol from "./protocol.js";
 
@@ -19,6 +20,16 @@ export const DEFAULT_MODEL = "RS00";
 export const KP_RANGE: readonly [number, number] = [protocol.KP_MIN, protocol.KP_MAX];
 export const KD_RANGE: readonly [number, number] = [protocol.KD_MIN, protocol.KD_MAX];
 export const ID_RANGE: readonly [number, number] = [1, 127];
+/** s, after an id write, before the motor is asked on its new id. */
+export const ID_SETTLE_S = 0.05;
+/**
+ * setId refuses a motor whose fresh feedback shows more than this: it may be energized. A
+ * de-energized motor at rest reads about 0.004 N*m and up to 0.08 rad/s (one torque step of the MIT
+ * frame is 0.007-0.008 N*m).
+ */
+export const SET_ID_MAX_TORQUE_NM = 0.03;
+/** rad/s, see SET_ID_MAX_TORQUE_NM. */
+export const SET_ID_MAX_VELOCITY = 0.3;
 export const DEFAULT_HOST_ID = protocol.HOST_CAN_ID;
 
 /**
@@ -327,11 +338,91 @@ export class RobStrideMotor implements Motor {
     return this.#send(protocol.encodeSetZero(this.motorId));
   }
 
-  async setId(_newId: number, _timeout = 0.5): Promise<void> {
-    throw new ArmError(
-      "changing a RobStride motor's CAN ID over the MIT protocol is not supported: the ID-change frame is "
-      + "not documented in the sources this SDK follows. Set the ID with RobStride Motor Studio "
-      + "(docs/motor-replacement.md)");
+  /**
+   * Change the motor's CAN ID to newId (MIT command 7: FF x6, new ID, FA). Persistent.
+   *
+   * Before the write the motor is read afresh, whatever this object cached. Refused when it does
+   * not answer, reports a fault, reports torque on, or (firmware that cannot report torque state)
+   * without `torqueOffConfirmed` from a caller who made sure it is de-energized; and in every case
+   * when its feedback shows more than SET_ID_MAX_TORQUE_NM of torque or SET_ID_MAX_VELOCITY of
+   * motion. Refused when anything answers on newId. After the write the motor must answer on newId
+   * and nothing on its old id: RouteUnverified when both answer; a motor still answering on the old
+   * ID took the frame without applying it (StateError: power-cycle it and scan).
+   */
+  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false, onWrite?: () => void): Promise<void> {
+    const [lo, hi] = ID_RANGE;
+    if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
+      throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
+    }
+    if (newId === this.motorId) return;
+    const label = this.joint.label, oldId = this.motorId;
+    const step = Math.min(timeout, 0.12);
+    const probe = new RobStrideMotor(this.joint.replace({ motorId: newId }), this.#backend, this.#hostId, this.#clock,
+      this.#log);
+    const backend = this.#backend, previous = backend.recvCallback;
+    // Replies on either id reach this motor and the probe, then the owner.
+    backend.setRecvCallback((canId, data, extended) => {
+      this.handleFrame(canId, data, extended);
+      probe.handleFrame(canId, data, extended);
+      if (previous !== null && previous !== this.handleFrame) previous(canId, data, extended);
+    });
+    try {
+      const status = await this.check(step);
+      if (status.hasFault) throw new StateError(`${label}: the motor reports a fault (${status.text}); clear it first`);
+      if (this.paramsSupported === null) await this.probeParams(step, 2); // firmware with parameter access reports torque state
+      const readings = [await this.readState(step)];
+      await this.#clock.sleep(0.02);
+      readings.push(await this.readState(step));
+      if (readings.some((r) => r.enabled)) {
+        throw new StateError(`${label}: the motor reports torque on; disable it before changing its id`);
+      }
+      if (readings[readings.length - 1]!.enabled === null && !torqueOffConfirmed) {
+        throw new StateError(`${label}: this firmware does not report whether torque is on. Make sure the motor `
+          + "is de-energized, then confirm (torqueOffConfirmed = true)");
+      }
+      const torque = Math.max(...readings.map((r) => Math.abs(r.torque)));
+      const velocity = Math.max(...readings.map((r) => Math.abs(r.velocity)));
+      if (torque > SET_ID_MAX_TORQUE_NM) {
+        throw new StateError(`${label}: the motor reads ${torque.toFixed(3)} N*m (a de-energized motor reads under `
+          + `${SET_ID_MAX_TORQUE_NM} N*m): it may be energized; not changing its id`);
+      }
+      if (velocity > SET_ID_MAX_VELOCITY) {
+        throw new StateError(`${label}: the motor is moving (${velocity.toFixed(2)} rad/s); let it come to rest`);
+      }
+      if (await RobStrideMotor.#answers(probe, step)) throw new ArmError(`motor ID ${newId} already answers on the bus`);
+      onWrite?.();
+      await this.#send(protocol.encodeSetId(oldId, newId));
+      await this.#clock.sleep(ID_SETTLE_S);
+      const onNew = await RobStrideMotor.#answers(probe, step);
+      const onOld = await RobStrideMotor.#answers(this, step);
+      if (onNew && !onOld) {
+        this.motorId = newId;
+        return;
+      }
+      if (onNew) {
+        throw new RouteUnverified(`${label}: ID ${oldId} and ID ${newId} both answer after the id write: another `
+          + "motor answers on one of them; the joint keeps its old id. Power-cycle and scan");
+      }
+      if (onOld) {
+        throw new StateError(`${label}: the motor still answers on ID ${oldId}; if the change was taken it `
+          + "applies after a power cycle, so power-cycle it and scan");
+      }
+      throw new StateError(`${label}: the motor answers on neither ID ${oldId} nor ID ${newId} after the id `
+        + "write; power-cycle it and scan");
+    } finally {
+      backend.setRecvCallback(previous);
+    }
+  }
+
+  /** Does `motor` answer a fault query within `timeout`? */
+  static async #answers(motor: RobStrideMotor, timeout: number): Promise<boolean> {
+    try {
+      await motor.check(timeout);
+      return true;
+    } catch (e) {
+      if (e instanceof ParamTimeout) return false;
+      throw e;
+    }
   }
 
   /**

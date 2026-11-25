@@ -1,7 +1,7 @@
 // Port of the Metal SDK's tests/unit/test_arm_damiao.py: arm behaviour that needs the Damiao motor,
 // an id change that the arm keeps routing afterwards and the late, duplicating gripper.
 import { describe, expect, it } from "vitest";
-import { ArmState } from "@makermods/metal-arm";
+import { ArmState, protocol, RouteUnverified } from "@makermods/metal-arm";
 import { FakeMotor, makeArm, twoJointConfig } from "./fakes.js";
 
 function approxAll(actual: number[], expected: number[], abs: number): void {
@@ -46,6 +46,70 @@ describe("arm on Damiao motors", () => {
     expect(arm.motors.map((m) => m.motorId)).toEqual([1, 5]);
     await arm.connect();
     approxAll(arm.getJointPositions(), [0.3, -0.5], 1e-3);
+    await arm.disconnect();
+  });
+
+  it("setMotorId refuses an id that is not a whole number before the bus is opened", async () => {
+    const { arm, bus } = make([new FakeMotor(1, "jlo", { position: 0.3 }), new FakeMotor(2, "jlo", { position: -0.5 })]);
+    await expect(arm.setMotorId(1, 4.9)).rejects.toThrow(/motor IDs must be/);
+    expect(bus.isOpen).toBe(false);
+    expect(bus.sent).toEqual([]);
+  });
+
+  it("an occupant answering the old id on another master reply id is heard (stricter)", async () => {
+    const source = new FakeMotor(1, "jlo", { position: 0.3 }), occupant = new FakeMotor(5, "jlo", { position: 0.1, online: false });
+    const original = source.handle.bind(source);
+    source.handle = (canId: number, data: Uint8Array) => {
+      if (canId === protocol.PARAM_CAN_ID && data[2] === protocol.OP_SAVE) {
+        occupant.sendId = 1;
+        occupant.replyId = 0x60; // a master id the joint's own route does not listen on
+        occupant.registers[protocol.Reg.ESC_ID] = 1;
+        occupant.registers[protocol.Reg.MST_ID] = 0x60;
+        occupant.online = true;
+      }
+      return original(canId, data);
+    };
+    const { arm } = make([source, new FakeMotor(2, "jlo", { position: -0.5 }), occupant]);
+    await expect(arm.setMotorId(1, 9)).rejects.toThrow(RouteUnverified);
+    expect(arm["unverified"].size).toBeGreaterThan(0); // enable() and attach() refuse this Arm
+    await arm.connect().catch(() => undefined);
+    await expect(arm.enable()).rejects.toThrow();
+    expect(source.enabled || occupant.enabled).toBe(false);
+    await arm.disconnect().catch(() => undefined);
+  });
+
+  it("both ids answering after the writes is RouteUnverified and blocks enable and attach (stricter)", async () => {
+    // Another motor starts answering on the old id once the new id is saved.
+    const source = new FakeMotor(1, "jlo", { position: 0.3 }), occupant = new FakeMotor(5, "jlo", { position: 0.1, online: false });
+    const original = source.handle.bind(source);
+    source.handle = (canId: number, data: Uint8Array) => {
+      if (canId === protocol.PARAM_CAN_ID && data[2] === protocol.OP_SAVE) {
+        occupant.sendId = 1;
+        occupant.replyId = protocol.DEFAULT_MASTER_OFFSET + 1;
+        occupant.registers[protocol.Reg.ESC_ID] = 1;
+        occupant.registers[protocol.Reg.MST_ID] = protocol.DEFAULT_MASTER_OFFSET + 1;
+        occupant.online = true;
+      }
+      return original(canId, data);
+    };
+    const { arm } = make([source, new FakeMotor(2, "jlo", { position: -0.5 }), occupant]);
+    await expect(arm.setMotorId(1, 9)).rejects.toThrow(RouteUnverified);
+    expect(arm.config.joints[0]!.motorId).toBe(1); // not routed to the new id
+    await arm.connect();
+    await expect(arm.enable()).rejects.toThrow(/unverified/);
+    await expect(arm.attach()).rejects.toThrow(/unverified/);
+    expect(source.enabled || occupant.enabled).toBe(false);
+    await arm.disconnect();
+  });
+
+  it("stop() releases a checked joint whose motor answers late and twice when its readings agree", async () => {
+    // The SDK's late/duplicating Damiao (as seen on real motors) on a returned joint.
+    const { arm, fakes } = make([new FakeMotor(1, "jlo", { position: 0.3, late: true, duplicate: true }),
+      new FakeMotor(2, "jlo", { position: -0.5 })], { restSpeed: 10.0, restRateHz: 200, restTimeout: 2.0 });
+    await arm.connect();
+    await arm.enable();
+    expect(await arm.stop()).toBe(true);
+    expect(fakes[1]!.enabled).toBe(false);
     await arm.disconnect();
   });
 

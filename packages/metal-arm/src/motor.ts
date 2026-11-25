@@ -602,6 +602,9 @@ export class Motor implements CoreMotor {
   /**
    * Change the send id to newId and the master id to hostId + newId, saved to flash.
    *
+   * Damiao motors report whether torque is on in every reply, so the fresh status read here decides;
+   * `torqueOffConfirmed` is only needed if a reply ever leaves that unknown.
+   *
    * Procedure (Damiao register map, DM_CAN change_motor_param/save_motor_param): refuse if anything
    * answers at newId; require the motor disabled (flash save is ignored while enabled); write MST_ID
    * then ESC_ID through the old id. The firmware applies both at once, so each echo is accepted on
@@ -610,9 +613,11 @@ export class Motor implements CoreMotor {
    * MST_ID through the new id. A motor that keeps answering at the old id has the change saved but
    * not applied: StateError asks for a power cycle.
    */
-  async setId(newId: number, timeout = 0.5): Promise<void> {
+  async setId(newId: number, timeout = 0.5, torqueOffConfirmed = false, onWrite?: () => void): Promise<void> {
     const [lo, hi] = ID_RANGE;
-    if (!(lo <= newId && newId <= hi)) throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`);
+    if (!(Number.isInteger(newId) && lo <= newId && newId <= hi)) {
+      throw new ValueError(`motor id must be in [${lo}, ${hi}], got ${newId}`); // whole numbers only
+    }
     if (newId === this.motorId) return;
     const oldId = this.motorId;
     const oldReply = this.replyId;
@@ -627,7 +632,14 @@ export class Motor implements CoreMotor {
         throw new StateError(`id ${newId} is already used by a motor on this bus; pick a free id or disconnect that motor`);
       }
       const status = await this.#check(step, 3, true);
-      if (status.enabled) throw new StateError(`${this.joint.label}: disable the motor before changing its id`);
+      if (status.enabled) {
+        throw new StateError(`${this.joint.label}: the motor reports torque on; disable it before changing its id`);
+      }
+      if (status.enabled === null && !torqueOffConfirmed) {
+        throw new StateError(`${this.joint.label}: the motor did not report whether torque is on. Make sure it `
+          + "is de-energized, then confirm (torque_off_confirmed=True; the CLI asks)");
+      }
+      onWrite?.();
       const reply = await this.#register(protocol.OP_WRITE, Reg.MST_ID,
         { value: newReply, dtype: "u32", timeout: step, attempts: 2, sendId: oldId, replyIds: replies, locked: true });
       if (reply.value("u32") !== newReply) {

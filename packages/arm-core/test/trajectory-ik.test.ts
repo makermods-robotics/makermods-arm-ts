@@ -4,6 +4,8 @@ import { Chain, chainFromConfig, xyzRpyToPose } from "../src/kinematics.js";
 import * as TI from "../src/trajectory-ik.js";
 import { IKStream, IKWeights, TrajectoryIK } from "../src/trajectory-ik.js";
 import { ARMS, armFixture, compare, configOf, type Json, loadFixture, Tally } from "./helpers/math-fixtures.js";
+import { SLICE } from "../src/cooperate.js";
+import { PLAN_S_PER_TICK } from "../src/planner.js";
 
 const RATE = 20.0;
 const tally = new Tally();
@@ -429,7 +431,13 @@ for (const arm of ARMS) {
       const t48 = median(() => ik.solve(s48.targets, s48.q_last, { rateHz: s48.rate_hz }));
       timings.push(`  ${arm}: 30 rows ${(t30 * 1e3).toFixed(0)} ms (Python ${(fx.timing.rows30_s * 1e3).toFixed(0)} ms), `
         + `48 rows ${(t48 * 1e3).toFixed(0)} ms (Python ${(fx.timing.rows48_s * 1e3).toFixed(0)} ms)`);
-      expect(t48).toBeLessThan(30);
+      // The wall-clock time is reported above, not asserted (it depends on the host). Asserted: the
+      // solve's estimated work (at most SLICE between pauses) fits moveEe's planning allowance per tick.
+      return (async () => {
+        let pauses = 0;
+        await ik.solveAsync(s48.targets, s48.q_last, { rateHz: s48.rate_hz, pause: async () => void (pauses += 1) });
+        expect((pauses + 1) * SLICE * 1e-6).toBeLessThan(s48.targets.length * PLAN_S_PER_TICK);
+      })();
     });
   });
 }
@@ -460,8 +468,6 @@ function stopwatch() {
   };
 }
 
-// Generous for a loaded machine; warm runs here measure 4-6 ms.
-const STRETCH_BOUND_MS = 40;
 
 for (const arm of ARMS) {
   describe(`${arm}: cooperative solves`, () => {
@@ -501,9 +507,13 @@ for (const arm of ARMS) {
       const longestPath = w2.end();
       timings.push(`  ${arm}: solveAsync 48 rows ${w1.stretches.length - 1} pauses, longest stretch ${longest48.toFixed(1)} ms; `
         + `solvePathAsync ${path.poses.length} poses ${w2.stretches.length - 1} pauses, longest ${longestPath.toFixed(1)} ms`);
+      // Stretch lengths depend on the host and are only reported. Pausing depends only on the
+      // yielded work estimates: the same solve pauses the same number of times, often enough.
       expect(w1.stretches.length).toBeGreaterThan(10);
-      expect(longest48).toBeLessThan(STRETCH_BOUND_MS);
-      expect(longestPath).toBeLessThan(STRETCH_BOUND_MS);
+      expect(w2.stretches.length - 1).toBeGreaterThanOrEqual(Math.ceil(path.poses.length / 64) - 1); // at least between chunks
+      let again = 0;
+      await ik.solveAsync(s48.targets, s48.q_last, { rateHz: s48.rate_hz, pause: async () => void (again += 1) });
+      expect(again).toBe(w1.stretches.length - 1);
     });
 
     it("abort rejects with the signal's reason and leaves the stream unchanged", async () => {

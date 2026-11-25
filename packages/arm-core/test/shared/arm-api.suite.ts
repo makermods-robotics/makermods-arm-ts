@@ -287,18 +287,48 @@ export function armApiSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
 
     it("setMotorId refuses an id already on the bus and cleans up", async () => {
-      const { arm, bus } = make();
-      let p = arm.setMotorId(1, 2);
+      const stranger = new FakeMotor(5, MODEL, { position: 0.1 }); // on the bus, not in the profile
+      const { arm, bus } = make([new FakeMotor(1, MODEL, { position: 0.3 }), new FakeMotor(2, MODEL, { position: -0.5 }), stranger]);
+      let p = arm.setMotorId(1, 5, { torqueOffConfirmed: true });
       await expect(p).rejects.toThrow(ArmError);
       await expect(p).rejects.toThrow(/already answers/);
       expect(bus.isOpen).toBe(false);
       expect(arm.state).toBe(ArmState.DISCONNECTED);
       await arm.connect();
-      p = arm.setMotorId(1, 2);
-      await expect(p).rejects.toThrow(ArmError);
+      p = arm.setMotorId(1, 5, { torqueOffConfirmed: true });
       await expect(p).rejects.toThrow(/already answers/);
       expect(bus.isOpen).toBe(true);
       expect(await arm.refresh()).toEqual([true, true]); // the arm's receive path is back
+    });
+
+    it("setMotorId gives a motor the profile lacks the id of a joint without its motor", async () => {
+      // Motor replacement, or a motor moved off its joint's id and back: the joint's own id is free on the bus.
+      const { arm, bus } = make([new FakeMotor(9, MODEL, { position: 0.3 }), new FakeMotor(2, MODEL, { position: -0.5 })]);
+      await arm.setMotorId(9, 1, { torqueOffConfirmed: true, replacing: "j1" });
+      expect(bus.isOpen).toBe(false);
+      expect(arm.config.joints[0]!.motorId).toBe(1);
+      await arm.connect();
+      expect(await arm.refresh()).toEqual([true, true]);
+      await arm.disconnect();
+    });
+
+    it("setMotorId gives a joint's id only to the motor named as its replacement", async () => {
+      // Across two calls a joint's motor moved to a spare id looks like a stranger; it must not take another joint's id.
+      const { arm, bus } = make([new FakeMotor(9, MODEL, { position: 0.3 }), new FakeMotor(1, MODEL, { position: 0.3 })]); // the gripper (2) is off
+      await expect(arm.setMotorId(9, 2, { torqueOffConfirmed: true })).rejects.toThrow(/replacing/);
+      expect(bus.isOpen).toBe(false);
+      expect(bus.sent).toEqual([]);
+      await expect(arm.setMotorId(9, 2, { torqueOffConfirmed: true, replacing: "j1" })).rejects.toThrow(/replacing/); // named, but not the joint with id 2
+      await arm.setMotorId(9, 2, { torqueOffConfirmed: true, replacing: "gripper" });
+      expect(arm.config.joints[1]!.motorId).toBe(2);
+    });
+
+    it("setMotorId refuses an id another joint has before opening the bus", async () => {
+      const { arm, bus, fakes } = make();
+      fakes[2]!.online = false; // even when that joint does not answer
+      await expect(arm.setMotorId(1, 2, { torqueOffConfirmed: true })).rejects.toThrow(/belongs to/);
+      expect(bus.isOpen).toBe(false);
+      expect(bus.sent).toEqual([]);
     });
 
     it("gripper opening and target from the gripper joint", async () => {

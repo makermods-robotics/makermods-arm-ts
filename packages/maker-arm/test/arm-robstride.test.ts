@@ -2,8 +2,8 @@
 // specifics (parameter-capable firmware, mode bits, RUN_MODE, the CAN-timeout watchdog and the
 // separate fault poll).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ArmConfigInit, ArmState, ConnectError, RobStrideMotor } from "@makermods/maker-arm";
-import { VirtualClock } from "@makermods/maker-arm/testing";
+import { type ArmConfigInit, ArmState, ConnectError, HeldByAnotherProgram, protocol, RobStrideMotor, StateError } from "@makermods/maker-arm";
+import { simulatedArm, VirtualClock } from "@makermods/maker-arm/testing";
 import { classify, FakeMotor, makeArm } from "./fakes.js";
 
 // Python's monotonic clock is far from zero; the tests' 0.0 "sent long ago" sentinels rely on it.
@@ -94,17 +94,43 @@ describe("RobStride arm behaviour", () => {
     expect([...fakes[1]!.log, ...fakes[2]!.log]).not.toContain("clear");
   });
 
-  it("the status deadline counts from when the loop took over", async () => {
+  it("the status deadline counts from the first unanswered query", async () => {
     const { arm, fakes, clock } = await enabledArm();
     const answer = fakes[1]!.handle.bind(fakes[1]!);
     fakes[1]!.handle = (canId, data) => (classify(canId, data)[0] === "status_query" ? [] : answer(canId, data));
     (arm.motors[0] as unknown as RobStrideMotor).statusTime = clock.now() - 5.0; // a slow enable: the last reply is old
     await arm["tick"](0.005);
+    expect(arm.state).toBe(ArmState.ENABLED); // nothing was asked yet in this session
+    arm["pollSent"] = new Map([[1, 0.0], [2, 1e9]]);
+    await arm["tick"](0.005); // asks motor 1, which never answers
     expect(arm.state).toBe(ArmState.ENABLED);
-    arm["pollingSince"] -= 1.0; // the loop has been asking for a second
+    arm["awaitingStatus"][0]! -= 1.0; // ... for a second
     await arm["tick"](0.005);
     expect(arm.state).toBe(ArmState.FAULT);
     expect(arm.faultReason).toContain("no fault-status reply");
+  });
+
+  it("status queries that fail to send still count as unanswered", async () => {
+    const { arm, clock } = await enabledArm();
+    arm.motors[0]!.pollStatus = () => Promise.reject(new Error("send failed"));
+    (arm.motors[0] as unknown as RobStrideMotor).statusTime = clock.now() - 5.0; // its last status reply is old
+    arm["pollSent"] = new Map([[1, 0.0], [2, 1e9]]);
+    await arm["tick"](0.005); // the query to motor 1 fails to go out
+    expect(arm.state).toBe(ArmState.ENABLED);
+    const deadline = 2 * arm.config.faultPollInterval + arm.config.feedbackTimeout;
+    arm["awaitingStatus"][0]! -= deadline + 0.1; // ... and nothing reached it since
+    await arm["tick"](0.005);
+    expect(arm.state).toBe(ArmState.FAULT);
+    expect(arm.faultReason).toContain("no fault-status reply");
+  });
+
+  it("a loop that could not poll is not a missing status reply", async () => {
+    const { arm, clock } = await enabledArm();
+    arm["pollSent"] = new Map([[1, 0.0], [2, 1e9]]);
+    await arm["tick"](0.005); // motor 1 answers this query
+    (arm.motors[0] as unknown as RobStrideMotor).statusTime = clock.now() - 5.0; // then the loop did not run for five seconds
+    await arm["tick"](0.005);
+    expect(arm.state).toBe(ArmState.ENABLED);
   });
 
   it("modern firmware leaving run mode faults", async () => {
@@ -168,13 +194,161 @@ describe("RobStride arm behaviour", () => {
     expect(gripper.log).not.toContain("enable");
   });
 
-  it("setMotorId is refused without a frame", async () => {
+  it("an id that is not a whole number is refused at the arm, the motor and the protocol", async () => {
     const { arm, bus } = make();
-    await expect(arm.setMotorId(1, 9)).rejects.toThrow(/Motor Studio/);
-    for (const [, data] of bus.sent) {
-      expect([...data.subarray(0, 6)]).toEqual([0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-      expect([...data.subarray(6)]).toEqual([0x00, 0xfb]);
-    }
+    await expect(arm.setMotorId(1, 42.9, { torqueOffConfirmed: true })).rejects.toThrow(/motor IDs must be/);
     expect(bus.isOpen).toBe(false);
+    expect(bus.sent).toEqual([]);
+    await expect(arm.motors[0]!.setId(42.9, 0.5, true)).rejects.toThrow(/motor id must be/);
+    expect(() => protocol.encodeSetId(1, 42.9)).toThrow(/MIT motor ID/);
+    expect(bus.sent).toEqual([]);
+  });
+
+  it("setMotorId changes the motor and routes the joint to it", async () => {
+    const { arm, bus, fakes: motors } = make();
+    await arm.setMotorId(1, 9, { torqueOffConfirmed: true });
+    expect(motors[1]!.motorId).toBe(9);
+    expect(bus.isOpen).toBe(false);
+    expect(arm.config.joints[0]!.motorId).toBe(9);
+    await arm.setMotorId(9, 1, { torqueOffConfirmed: true });
+    expect(motors[1]!.motorId).toBe(1);
+    expect(arm.config.joints[0]!.motorId).toBe(1);
+  });
+
+  const idWrites = (bus: { sent: Array<[number, Uint8Array]> }): number[] =>
+    bus.sent.filter(([, d]) => d.subarray(0, 6).every((b) => b === 0xff) && d[7] === 0xfa).map(([id]) => id);
+
+  it("setMotorId refuses an id another joint has in the profile, even when it is offline", async () => {
+    const { arm, bus, fakes: motors } = make();
+    motors[2]!.online = false;
+    await expect(arm.setMotorId(1, 2, { torqueOffConfirmed: true })).rejects.toThrow(/belongs to/);
+    expect(idWrites(bus)).toEqual([]);
+    expect(motors[1]!.motorId).toBe(1);
+  });
+
+  it("setMotorId reads the motor before writing", async () => {
+    // The arm builds a fresh Motor, which has no feedback until setId reads it.
+    const { arm, bus, fakes: motors } = make([new FakeMotor(1, "RS00", { position: 0.3 }), new FakeMotor(2, "RS00", { position: -0.5 })]);
+    await expect(arm.setMotorId(1, 9)).rejects.toThrow(StateError); // old firmware: torque state unknown
+    await expect(arm.setMotorId(1, 9)).rejects.toThrow(/torqueOffConfirmed|torque_off_confirmed/);
+    motors[1]!.torque = 0.3; // holding torque: energized
+    await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/energized/);
+    motors[1]!.torque = 0.0;
+    motors[1]!.paramsSupported = true;
+    motors[1]!.enabled = true; // energized by another program
+    await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/torque on/);
+    expect(idWrites(bus)).toEqual([]);
+    expect(motors[1]!.motorId).toBe(1);
+  });
+
+  /** A motor whose id write is ignored, while a motor silent before answers on the target id after it. */
+  function ambiguous(source: FakeMotor, occupant: FakeMotor): void {
+    source.applyIdChange = false;
+    const original = source.handle.bind(source);
+    source.handle = (canId: number, data: Uint8Array) => {
+      if (data.subarray(0, 6).every((b) => b === 0xff) && data[7] === 0xfa) occupant.online = true;
+      return original(canId, data);
+    };
+  }
+
+  it("a write error on the old-route probe after the id write leaves both routes unverified", async () => {
+    const { arm, bus, fakes: motors } = make([new FakeMotor(1, "RS00", { position: 0.3 }), new FakeMotor(2, "RS00", { position: -0.5 }),
+      new FakeMotor(9, "RS00", { position: 0.2, online: false })]);
+    const send = bus.send.bind(bus);
+    let written = false;
+    bus.send = (canId: number, data: Uint8Array, extended = true) => {
+      const [kind] = classify(canId, data);
+      if (kind === "set_id") written = true;
+      if (written && kind === "status_query" && canId === 1) return Promise.reject(new Error("write failed"));
+      return send(canId, data, extended);
+    };
+    await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/write failed/);
+    expect(motors[1]!.motorId).toBe(9); // the motor moved
+    bus.send = send;
+    motors[9]!.online = true; // another motor now answers where the joint's motor was
+    expect(arm["unverified"].size).toBeGreaterThan(0); // enable() and attach() refuse this Arm
+    await arm.connect().catch(() => undefined);
+    await expect(arm.enable()).rejects.toThrow();
+    expect(Object.values(motors).some((m) => m.enabled)).toBe(false);
+    await arm.disconnect().catch(() => undefined);
+  });
+
+  it("a set-id that leaves both ids answering keeps the joint from enabling", async () => {
+    const source = new FakeMotor(1, "RS00", { position: 0.3 }), occupant = new FakeMotor(9, "RS00", { online: false });
+    ambiguous(source, occupant);
+    const { arm } = make([source, new FakeMotor(2, "RS00", { position: -0.5 }), occupant]);
+    await expect(arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/both answer/);
+    await arm.connect();
+    await expect(arm.enable()).rejects.toThrow(ConnectError);
+    await expect(arm.enable()).rejects.toThrow(/unverified/);
+    await expect(arm.attach()).rejects.toThrow(/unverified/);
+    expect(source.enabled).toBe(false);
+    await arm.disconnect();
+  });
+
+  it("both ids answering after a replacement blocks the replaced joint too", async () => {
+    const source = new FakeMotor(9, "RS00", { position: 0.3 }), occupant = new FakeMotor(2, "RS00", { position: -0.5, online: false });
+    ambiguous(source, occupant);
+    const { arm } = make([new FakeMotor(1, "RS00", { position: 0.3 }), source, occupant]);
+    await expect(arm.setMotorId(9, 2, { torqueOffConfirmed: true, replacing: "gripper" })).rejects.toThrow(/both answer/);
+    await arm.connect();
+    await expect(arm.enable()).rejects.toThrow(/unverified/);
+    await arm.disconnect();
+  });
+
+  it("an arm made after an ambiguous set-id is not refused", async () => {
+    const source = new FakeMotor(1, "RS00", { position: 0.3 }), occupant = new FakeMotor(9, "RS00", { online: false });
+    ambiguous(source, occupant);
+    const made = make([source, new FakeMotor(2, "RS00", { position: -0.5 }), occupant]);
+    await expect(made.arm.setMotorId(1, 9, { torqueOffConfirmed: true })).rejects.toThrow(/both answer/);
+    expect(made.arm["unverified"].size).toBe(1);
+    const fresh = new (made.arm.constructor as typeof import("@makermods/maker-arm").Arm)(made.arm.config, made.bus,
+      { clock: made.clock, logger: made.logger, frameSpacing: 0 });
+    expect(fresh["unverified"].size).toBe(0);
+  });
+});
+
+// ── an arm another program holds, on firmware that does not report torque state ──
+describe("held by another program (old firmware)", () => {
+  function heldByAnotherProgram(positionsDeg: number[], torquesNm: Record<string, number>) {
+    const clock = new VirtualClock();
+    const [arm, sim] = simulatedArm({ positions: positionsDeg.map((v) => v * (Math.PI / 180)), clock });
+    arm.PARAM_TIMEOUT = 0.005;
+    for (const motor of sim.motors.values()) motor.paramsSupported = false; // no parameter access, no mode bits, no torque state
+    for (const [name, tau] of Object.entries(torquesNm)) {
+      const motor = sim.motor(name);
+      motor.enabled = true; // energized by the other program; old firmware reports no mode bits
+      motor.torque = tau;
+    }
+    return { arm, sim };
+  }
+
+  it("enable() refuses a legacy arm that is producing holding torque and sends it nothing", async () => {
+    const { arm, sim } = heldByAnotherProgram([0, -15, 22, 0, 0, 0, -3], { shoulder_lift: 0.4, elbow_flex: 4.8, wrist_flex: 1.5 });
+    await arm.connect();
+    expect(arm.motors.every((m) => m.feedback!.enabled === null)).toBe(true); // torque state not reported
+    for (const m of sim.motors.values()) {
+      m.frames.length = 0;
+      m.log.length = 0;
+    }
+    const p = arm.enable();
+    await expect(p).rejects.toThrow(HeldByAnotherProgram);
+    await expect(p).rejects.toThrow(/producing torque.*rest/);
+    expect(arm.state).toBe(ArmState.CONNECTED);
+    expect([...sim.motors.values()].every((m) => !m.frames.length && !m.log.includes("enable"))).toBe(true); // no preload, no enable
+    await arm.disconnect();
+  });
+
+  it("a legacy arm resting de-energized enables as before", async () => {
+    const { arm, sim } = heldByAnotherProgram([0, -4.2, 10.3, -1, 0, 0, -3], {});
+    for (const m of sim.motors.values()) {
+      m.enabled = false;
+      m.torque = -0.0034; // the reading of a de-energized motor
+    }
+    await arm.connect();
+    await arm.enable();
+    expect(arm.state).toBe(ArmState.ENABLED);
+    await arm.disable();
+    await arm.disconnect();
   });
 });

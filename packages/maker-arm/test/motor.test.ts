@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ArmConfig, ArmError, ConnectError, DEFAULT_HOST_ID, DEFAULT_MODEL, FaultLatched, ID_RANGE, JointConfig, KD_RANGE,
-  KP_RANGE, type Logger, MAKER_ARM, MODELS, PARAMS, ParamTimeout, protocol as p, RobStrideMotor, route, ValueError,
+  KP_RANGE, type Logger, MAKER_ARM, MODELS, PARAMS, ParamTimeout, protocol as p, RobStrideMotor, RouteUnverified, route,
+  StateError, ValueError,
 } from "@makermods/maker-arm";
 import { VirtualClock } from "@makermods/maker-arm/testing";
 import { FakeBus, FakeMotor, feedbackBytes } from "./fakes.js";
@@ -185,14 +186,132 @@ describe("commands", () => {
     expect(fake.position).toBe(0.0);
   });
 
-  it("set id is not documented for mit and sends nothing", async () => {
-    const [motor, bus] = wired(new FakeMotor(1));
-    const done = motor.setId(5);
+  it("set id writes the id and verifies the motor answers there", async () => {
+    const fake = new FakeMotor(7);
+    const [motor, bus] = wired(fake);
+    const owner = bus.recvCallback;
+    await motor.setId(8, undefined, true);
+    expect(fake.motorId === 8 && motor.motorId === 8).toBe(true);
+    expect(fake.log).toContainEqual(["set_id", 8]);
+    expect(bus.sent.map(([id, d]) => [id, [...d]])).toContainEqual([7, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 8, 0xfa]]);
+    expect(bus.recvCallback).toBe(owner); // the tap is removed
+    await motor.setId(7, undefined, true);
+    expect(fake.motorId === 7 && motor.motorId === 7).toBe(true);
+  });
+
+  it("set id reports a motor that keeps its id", async () => {
+    const fake = new FakeMotor(7);
+    fake.applyIdChange = false;
+    const [motor] = wired(fake);
+    const done = motor.setId(8, 0.02, true);
+    await expect(done).rejects.toThrow(StateError);
+    await expect(done).rejects.toThrow(/still answers on ID 7/);
+    expect(motor.motorId).toBe(7);
+  });
+
+  it("set id reports a motor that stops answering", async () => {
+    const fake = new FakeMotor(7);
+    const [motor] = wired(fake);
+    const original = fake.handle.bind(fake);
+    fake.handle = (canId, data) => {
+      const replies = original(canId, data);
+      if (data[7] === 0xfa) fake.online = false;
+      return replies;
+    };
+    await expect(motor.setId(8, 0.02, true)).rejects.toThrow(/neither ID 7 nor ID 8/);
+  });
+
+  it("set id refuses bad ids a fault and an enabled motor without writing", async () => {
+    const fake = new FakeMotor(3, "RS00", { paramsSupported: true });
+    const [motor, bus] = wired(fake);
+    await motor.validate(0.005);
+    await expect(motor.setId(128)).rejects.toThrow(ValueError);
+    await motor.setId(3); // no-op
+    fake.faulted = true;
+    const faulted = motor.setId(9, 0.02, true);
+    await expect(faulted).rejects.toThrow(StateError);
+    await expect(faulted).rejects.toThrow(/fault/);
+    await motor.clearFault(); // the operator clears it
+    await motor.enableConfirmed();
+    await expect(motor.setId(9, 0.02, true)).rejects.toThrow(/torque on/);
+    expect(idWrites(bus)).toEqual([]);
+    expect(fake.motorId).toBe(3);
+  });
+
+  it("set id refuses a fresh motor object on an energized motor", async () => {
+    // A motor object made for the call has no feedback of its own: setId reads the motor first.
+    const fake = new FakeMotor(7, "RS00", { paramsSupported: true, enabled: true });
+    const [motor, bus] = wired(fake);
+    await expect(motor.setId(8, 0.02, true)).rejects.toThrow(/torque on/);
+    expect(idWrites(bus)).toEqual([]);
+    expect(fake.motorId).toBe(7);
+  });
+
+  it("set id with unknown torque state needs the confirmation", async () => {
+    const fake = new FakeMotor(7); // old firmware: no mode bits
+    const [motor, bus] = wired(fake);
+    await expect(motor.setId(8, 0.02)).rejects.toThrow(/torqueOffConfirmed/);
+    expect(idWrites(bus)).toEqual([]);
+    await motor.setId(8, 0.02, true);
+    expect(fake.motorId).toBe(8);
+  });
+
+  it.each([{ torque: 0.2 }, { torque: -0.05 }, { velocity: 0.5 }])("set id refuses a motor holding torque or moving %j",
+    async (reading) => {
+      const fake = new FakeMotor(7);
+      Object.assign(fake, reading);
+      const [motor, bus] = wired(fake);
+      await expect(motor.setId(8, 0.02, true)).rejects.toThrow(/energized|moving/);
+      expect(idWrites(bus)).toEqual([]);
+      expect(fake.motorId).toBe(7);
+    });
+
+  it("set id probes the destination before writing", async () => {
+    const source = new FakeMotor(7), occupant = new FakeMotor(8);
+    const bus = new FakeBus([source, occupant]);
+    const motor = new RobStrideMotor(joint(7, "RS00", { name: "j" }), bus, DEFAULT_HOST_ID, new VirtualClock(), silent);
+    bus.setRecvCallback((id, data, ext) => motor.handleFrame(id, data, ext));
+    const done = motor.setId(8, 0.02, true);
     await expect(done).rejects.toThrow(ArmError);
-    await expect(done).rejects.toThrow(/not documented/);
-    expect(bus.sent).toEqual([]);
+    await expect(done).rejects.toThrow(/already answers/);
+    expect(idWrites(bus)).toEqual([]);
+    expect(source.motorId).toBe(7);
+  });
+
+  it("set id needs the old id to go silent", async () => {
+    // The source ignores the write and a motor on the new id, silent during the probe, answers
+    // afterwards: the joint must not be rekeyed to that other motor.
+    const source = new FakeMotor(7), occupant = new FakeMotor(8, "RS00", { online: false });
+    source.applyIdChange = false;
+    const original = source.handle.bind(source);
+    source.handle = (canId, data) => {
+      if (isIdWrite(data)) occupant.online = true;
+      return original(canId, data);
+    };
+    const bus = new FakeBus([source, occupant]);
+    const motor = new RobStrideMotor(joint(7, "RS00", { name: "j" }), bus, DEFAULT_HOST_ID, new VirtualClock(), silent);
+    bus.setRecvCallback((id, data, ext) => motor.handleFrame(id, data, ext));
+    const done = motor.setId(8, 0.02, true);
+    await expect(done).rejects.toThrow(RouteUnverified);
+    await expect(done).rejects.toThrow(/ID 7 and ID 8 both answer/);
+    expect(motor.motorId).toBe(7);
+  });
+
+  it("encodeSetId is command 7 with the new id in byte 6", () => {
+    const [id, data] = p.encodeSetId(7, 8);
+    expect([id, [...data]]).toEqual([7, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 8, 0xfa]]);
+    expect(() => p.encodeSetId(7, 0)).toThrow(ValueError);
+    expect(() => p.encodeSetId(7, 128)).toThrow(ValueError);
   });
 });
+
+function isIdWrite(data: Uint8Array): boolean {
+  return data.length === 8 && data.subarray(0, 6).every((b) => b === 0xff) && data[7] === 0xfa;
+}
+
+function idWrites(bus: FakeBus): number[] {
+  return bus.sent.filter(([, d]) => isIdWrite(d)).map(([id]) => id);
+}
 
 // ── connect-time validation and mode bits ──
 describe("connect-time validation and mode bits", () => {

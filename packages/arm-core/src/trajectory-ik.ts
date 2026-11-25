@@ -981,20 +981,43 @@ const powi = (x: number, k: number): number => Math.pow(x, k);
  */
 export function straightLine(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
                              ease = true): number[][][] {
+  const row = straightLineRows(start, goal, ticks, ease);
+  return Array.from({ length: ticks }, (_, i) => row(i));
+}
+
+/** Rows (ticks per pause) straightLineAsync builds between pauses: a few milliseconds of work. */
+export const STRAIGHT_LINE_ROWS_PER_PAUSE = 256;
+
+/**
+ * `straightLine` without blocking the event loop: the same rows, with `pause()` every
+ * STRAIGHT_LINE_ROWS_PER_PAUSE rows (default a macrotask).
+ */
+export async function straightLineAsync(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
+                                        options: { ease?: boolean; pause?: () => Promise<void> } = {}): Promise<number[][][]> {
+  const row = straightLineRows(start, goal, ticks, options.ease ?? true);
+  const pause = options.pause ?? macrotask;
+  const out: number[][][] = [];
+  for (let i = 0; i < ticks; i++) {
+    if (i > 0 && i % STRAIGHT_LINE_ROWS_PER_PAUSE === 0) await pause();
+    out.push(row(i));
+  }
+  return out;
+}
+
+function straightLineRows(start: readonly (readonly number[])[], goal: readonly (readonly number[])[], ticks: number,
+                          ease: boolean): (i: number) => number[][] {
   if (ticks < 1) throw new ValueError("ticks must be >= 1");
-  const s = Array.from({ length: ticks }, (_, i) => {
-    const u = (i + 1) / ticks;
-    return ease ? (10 * powi(u, 3) - 15 * powi(u, 4)) + 6 * powi(u, 5) : u;
-  });
   const s0 = rows3(start);
   const g0 = rows3(goal);
   const turn = log3(mulTA(s0, 0, g0, 0));
   const dp = [0, 1, 2].map((i) => goal[i]![3]! - start[i]![3]!);
-  return s.map((si) => {
+  return (i: number) => {
+    const u = (i + 1) / ticks;
+    const si = ease ? (10 * powi(u, 3) - 15 * powi(u, 4)) + 6 * powi(u, 5) : u;
     const rot = mat3Mul(s0, exp3(si * turn[0], si * turn[1], si * turn[2]));
-    return [0, 1, 2].map((i) => [rot[3 * i]!, rot[3 * i + 1]!, rot[3 * i + 2]!, start[i]![3]! + si * dp[i]!])
+    return [0, 1, 2].map((r) => [rot[3 * r]!, rot[3 * r + 1]!, rot[3 * r + 2]!, start[r]![3]! + si * dp[r]!])
       .concat([[0, 0, 0, 1]]);
-  });
+  };
 }
 
 // ── pose pre-processing ──
@@ -1118,12 +1141,19 @@ export function seamBlend(q: readonly (readonly number[])[], qFrom: readonly num
   return out;
 }
 
-/** A long pose path (T, 4, 4) solved in chunks of `chunk` ticks, each continuing the one before. */
+/**
+ * A long pose path (T, 4, 4) solved in chunks of `chunk` ticks, each continuing the one before.
+ * `between` is called before each chunk; it may throw to stop the solve.
+ */
 export function solvePath(ik: TrajectoryIK, poses: readonly (readonly (readonly number[])[])[], qLast: readonly number[],
-                          rateHz: number, speedCap: number | null = null, chunk = 64): IKResult {
+                          rateHz: number, speedCap: number | null = null, chunk = 64,
+                          between: (() => void) | null = null): IKResult {
   const stream = new IKStream(ik, qLast, rateHz, speedCap);
   const parts: IKResult[] = [];
-  for (let i = 0; i < poses.length; i += chunk) parts.push(stream.feed(poses.slice(i, i + chunk)));
+  for (let i = 0; i < poses.length; i += chunk) {
+    if (between !== null) between();
+    parts.push(stream.feed(poses.slice(i, i + chunk)));
+  }
   if (!parts.length) throw new ValueError("need at least one array to concatenate");
   return {
     q: parts.flatMap((p) => p.q),
@@ -1137,11 +1167,13 @@ export function solvePath(ik: TrajectoryIK, poses: readonly (readonly (readonly 
 /**
  * `solvePath` without blocking the event loop: the same chunks and numbers, with a pause for the
  * event loop every few milliseconds of computation and `options.signal` checked at each pause.
+ * `options.between` is called before each chunk; it may throw to stop the solve.
  */
 export async function solvePathAsync(ik: TrajectoryIK, poses: readonly (readonly (readonly number[])[])[],
                                      qLast: readonly number[], rateHz: number,
-                                     options: { speedCap?: number | null; chunk?: number } & CooperativeOptions = {}): Promise<IKResult> {
-  const { speedCap = null, chunk = 64 } = options;
+                                     options: { speedCap?: number | null; chunk?: number; between?: (() => void) | null }
+                                       & CooperativeOptions = {}): Promise<IKResult> {
+  const { speedCap = null, chunk = 64, between = null } = options;
   const stream = new IKStream(ik, qLast, rateHz, speedCap);
   const parts: IKResult[] = [];
   const pause = options.pause ?? macrotask;
@@ -1150,6 +1182,7 @@ export async function solvePathAsync(ik: TrajectoryIK, poses: readonly (readonly
       await pause();
       if (options.signal?.aborted) throw options.signal.reason;
     }
+    if (between !== null) between();
     parts.push(await stream.feedAsync(poses.slice(i, i + chunk), { pause, signal: options.signal }));
   }
   if (!parts.length) throw new ValueError("need at least one array to concatenate");

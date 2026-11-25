@@ -20,6 +20,19 @@
  * `usb:` and `path:` ids parse (a Python rig file's `cameras:` entries load), but opening one fails
  * with a message saying to name that camera by device or label.
  *
+ * `url:http://host:port/path` reads a camera another program serves over HTTP, as in the Python
+ * SDK: a multipart MJPEG stream (`multipart/x-mixed-replace`, as from a camera server,
+ * mjpg-streamer or an IP camera), or a single JPEG URL fetched again at most `fps` times a second.
+ * It works in a page, a worker and Node (anywhere with `fetch` and web streams; a browser needs the
+ * server to allow the page's origin). Header lines, header counts and frames are bounded
+ * (MAX_LINE_BYTES, MAX_HEADERS, MAX_FRAME_BYTES): a stream past a bound fails and is reopened. A
+ * JPEG without EOI at its end (a truncated part) is skipped and counted (HttpCapture.incomplete). Only
+ * the newest JPEG is kept, so a slow reader gets the latest picture rather than a backlog; frames
+ * are stamped when they arrive (less the server's `X-Frame-Age-Ms` part header when it sends one)
+ * and keep the bytes as served (`Frame.jpeg`). A JPEG is decoded with createImageBitmap into a
+ * VideoFrame where the runtime has both, else (Node) it stays a JpegImage. close() never waits on
+ * the server.
+ *
  * Capture. Each camera asks for 640x480 @ 30 fps (ideal/max constraints, so no camera is refused
  * for lacking the mode); one that cannot start there (two uncompressed streams on one USB2 hub) is
  * retried at 320x240 @ 15, then @ 10 fps, and stays at the mode that worked. Frames come from a
@@ -57,6 +70,18 @@ export const READ_FAILURE_S = 1.0;
 export const REOPEN_S = 1.0;
 /** s: how often an open camera checks it is still receiving frames. */
 export const WATCH_S = 0.1;
+/** s: url: cameras, connect and read timeout. */
+export const URL_TIMEOUT_S = 5.0;
+/** url: cameras, longest header or boundary line. */
+export const MAX_LINE_BYTES = 8192;
+/** url: cameras, most header lines in one part. */
+export const MAX_HEADERS = 64;
+/** url: cameras, largest JPEG taken. */
+export const MAX_FRAME_BYTES = 8 * 1024 * 1024;
+/** s: url: cameras, how long one HttpCapture.read() waits for a new JPEG. */
+export const URL_READ_WAIT_S = 0.1;
+/** The schemes a url: camera may use. */
+export const URL_SCHEMES: readonly string[] = Object.freeze(["http://", "https://"]);
 
 // ── what the browser provides (injectable, so tests can fake it) ──
 
@@ -112,6 +137,20 @@ export interface CanvasLike {
 /** A canvas of the given size (default: an OffscreenCanvas). */
 export type CanvasFactory = (width: number, height: number) => CanvasLike;
 
+/** The parts of a fetch() Response a url: camera uses. */
+export interface FetchResponseLike {
+  readonly status: number;
+  readonly headers: { get(name: string): string | null };
+  readonly body: ReadableStream<Uint8Array> | null;
+}
+
+/** fetch() as a url: camera calls it. */
+export type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal; cache: "no-store" }) =>
+  Promise<FetchResponseLike>;
+
+/** A JPEG as a picture stamped `timestampUs`, or null when it does not decode. */
+export type JpegDecoder = (jpeg: Uint8Array, timestampUs: number) => Promise<VideoFrameLike | null>;
+
 function navigatorMediaDevices(): MediaDevicesLike {
   const md = (globalThis as { navigator?: { mediaDevices?: MediaDevicesLike } }).navigator?.mediaDevices;
   if (!md) {
@@ -132,6 +171,11 @@ export async function encodeJpeg(image: VideoFrameLike, quality = 0.85, size?: {
                                  canvas: CanvasFactory = offscreenCanvas): Promise<Uint8Array> {
   const width = size?.width ?? image.displayWidth;
   const height = size?.height ?? image.displayHeight;
+  if (image instanceof JpegImage) {
+    // Undecoded (no createImageBitmap here): the JPEG as served, which only fits its own size.
+    if (width === image.displayWidth && height === image.displayHeight) return image.jpeg.slice();
+    throw new ConnectError("scaling a url: camera's JPEG needs createImageBitmap and a canvas (a browser page or worker)");
+  }
   const c = canvas(width, height);
   const ctx = c.getContext("2d");
   if (!ctx) throw new ConnectError("no 2d canvas context for JPEG encoding");
@@ -151,8 +195,8 @@ export interface CameraInfo {
   index: number;
   /** The label (empty before permission: `camera N`). */
   name: string;
-  /** Python: /dev/videoN; a browser has no device path. */
-  path: null;
+  /** The URL of a url: camera; null otherwise (Python: /dev/videoN; a browser has no device path). */
+  path: string | null;
   deviceId: string;
   groupId: string;
 }
@@ -175,9 +219,27 @@ export type CameraId =
   | { kind: "device"; deviceId: string }
   | { kind: "label"; label: string }
   | { kind: "index"; index: number }
-  | { kind: "usb" | "path"; path: string };
+  | { kind: "usb" | "path"; path: string }
+  | { kind: "url"; url: string };
 
-/** Parses an id (`device:`, `label:`, `index:N`, a number, or the Python SDK's `usb:` / `path:`). */
+/** The URL a `url:` id names, or null for any other id. */
+export function urlOf(cameraId: string | number): string | null {
+  return typeof cameraId === "string" && cameraId.startsWith("url:") ? cameraId.slice(4) : null;
+}
+
+/** Is `text` a camera id (rather than a rig camera name)? */
+export function isCameraId(text: string): boolean {
+  const url = urlOf(text);
+  if (url !== null) return URL_SCHEMES.some((scheme) => url.startsWith(scheme));
+  return ["usb", "path", "index", "device", "label"].includes(text.split(":", 1)[0]!);
+}
+
+/** A CameraInfo for a `url:` id (nothing is fetched). */
+export function urlCameraInfo(cameraId: string): CameraInfo {
+  return { id: cameraId, index: -1, name: "MJPEG over HTTP", path: urlOf(cameraId), deviceId: "", groupId: "" };
+}
+
+/** Parses an id (`device:`, `label:`, `index:N`, a number, `url:http(s)://...`, or the Python SDK's `usb:` / `path:`). */
 export function parseCameraId(id: string | number): CameraId {
   if (typeof id === "number") {
     if (!Number.isInteger(id) || id < 0) throw new ValueError(`camera index must be a non-negative integer, got ${id}`);
@@ -190,7 +252,9 @@ export function parseCameraId(id: string | number): CameraId {
   if (prefix === "device" && rest) return { kind: "device", deviceId: rest };
   if (prefix === "label" && rest) return { kind: "label", label: rest };
   if ((prefix === "usb" || prefix === "path") && rest) return { kind: prefix, path: rest };
-  throw new ValueError(`unknown camera id '${id}': expected device:<deviceId>, label:<text>, index:N, usb:<by-path> or path:<by-path>`);
+  if (prefix === "url" && URL_SCHEMES.some((scheme) => rest.startsWith(scheme))) return { kind: "url", url: rest };
+  throw new ValueError(`unknown camera id '${id}': expected device:<deviceId>, label:<text>, index:N, usb:<by-path>, ` +
+    "path:<by-path> or url:http://...");
 }
 
 async function videoInputs(md: MediaDevicesLike): Promise<MediaDeviceInfoLike[]> {
@@ -198,18 +262,20 @@ async function videoInputs(md: MediaDevicesLike): Promise<MediaDeviceInfoLike[]>
 }
 
 /**
- * The deviceId an id names among the present cameras. A label or index needs the page's camera
- * permission: when labels are still hidden, one getUserMedia({video: true}) asks for it (its stream
- * is stopped at once) and the cameras are listed again.
+ * The deviceId an id names among the present cameras, or a url: camera's URL. A label or index
+ * needs the page's camera permission: when labels are still hidden, one getUserMedia({video: true})
+ * asks for it (its stream is stopped at once) and the cameras are listed again.
  */
-export async function resolveCamera(id: string | number, mediaDevices: MediaDevicesLike = navigatorMediaDevices()): Promise<string> {
+export async function resolveCamera(id: string | number, mediaDevices?: MediaDevicesLike): Promise<string> {
   const parsed = parseCameraId(id);
   const shown = typeof id === "number" ? `index:${id}` : id;
+  if (parsed.kind === "url") return parsed.url;
   if (parsed.kind === "usb" || parsed.kind === "path") {
     throw new ConnectError(`camera ${shown} names a USB port, which a browser cannot see: name it device:<deviceId> or ` +
       "label:<text> (listCameras() lists both)");
   }
   if (parsed.kind === "device") return parsed.deviceId;
+  mediaDevices ??= navigatorMediaDevices();
   let inputs = await videoInputs(mediaDevices);
   if (inputs.some((d) => !d.label || !d.deviceId)) {
     const stream = await mediaDevices.getUserMedia({ video: true, audio: false });
@@ -231,6 +297,473 @@ export async function resolveCamera(id: string | number, mediaDevices: MediaDevi
   throw new ConnectError(`several cameras match ${shown} (${matches.map((d) => d.label).join(", ")}); ` +
     "name one as device:<deviceId>");
 }
+
+// ── HTTP cameras ──
+
+const LF = 0x0a;
+const DASH = 0x2d;
+
+function bytesOf(text: string): Uint8Array {
+  return Uint8Array.from(text, (c) => c.charCodeAt(0) & 0xff);
+}
+
+function latin1(bytes: Uint8Array): string {
+  let out = "";
+  for (const b of bytes) out += String.fromCharCode(b);
+  return out;
+}
+
+/** Python's bytes.strip(): ASCII whitespace off both ends. */
+function stripBytes(b: Uint8Array): Uint8Array {
+  const space = (c: number) => c === 0x20 || (c >= 0x09 && c <= 0x0d);
+  let i = 0;
+  let j = b.length;
+  while (i < j && space(b[i]!)) i++;
+  while (j > i && space(b[j - 1]!)) j--;
+  return b.subarray(i, j);
+}
+
+function startsWith(b: Uint8Array, prefix: Uint8Array): boolean {
+  if (b.length < prefix.length) return false;
+  for (let i = 0; i < prefix.length; i++) if (b[i] !== prefix[i]) return false;
+  return true;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && startsWith(a, b);
+}
+
+function concatBytes(chunks: readonly Uint8Array[], size: number): Uint8Array {
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
+/** Python's bytes.lower(): ASCII letters only. */
+function asciiLower(text: string): string {
+  return text.replace(/[A-Z]/g, (c) => c.toLowerCase());
+}
+
+const isJpeg = (b: Uint8Array): boolean => b.length >= 2 && b[0] === 0xff && b[1] === 0xd8;
+
+/** A whole JPEG: SOI first and EOI last (CR, LF and NUL padding after it allowed), not a truncated one. */
+function isCompleteJpeg(b: Uint8Array): boolean {
+  let end = b.length;
+  while (end > 4 && (b[end - 1] === 0x0d || b[end - 1] === LF || b[end - 1] === 0x00)) end -= 1;
+  return end >= 4 && isJpeg(b) && b[end - 2] === 0xff && b[end - 1] === 0xd9;
+}
+
+/** The media type of a response (`multipart/x-mixed-replace`, `image/jpeg`; text/plain when unnamed), lower case. */
+function contentType(headers: FetchResponseLike["headers"]): string {
+  const kind = asciiLower((headers.get("content-type") ?? "").split(";", 1)[0]!.trim());
+  return kind.includes("/") ? kind : "text/plain";
+}
+
+/** Bytes of a stream read as lines and runs (Python's buffered readline(limit) / read(n)). */
+class ByteReader {
+  readonly #next: () => Promise<Uint8Array | null>;
+  #chunks: Uint8Array[] = [];
+  #size = 0;
+  #eof = false;
+
+  constructor(next: () => Promise<Uint8Array | null>) {
+    this.#next = next;
+  }
+
+  async #more(): Promise<boolean> {
+    if (this.#eof) return false;
+    const chunk = await this.#next();
+    if (chunk === null) {
+      this.#eof = true;
+      return false;
+    }
+    if (chunk.length) {
+      this.#chunks.push(chunk);
+      this.#size += chunk.length;
+    }
+    return true;
+  }
+
+  #take(n: number): Uint8Array {
+    const out = new Uint8Array(n);
+    let at = 0;
+    while (at < n) {
+      const c = this.#chunks[0]!;
+      const k = Math.min(c.length, n - at);
+      out.set(c.subarray(0, k), at);
+      at += k;
+      if (k === c.length) this.#chunks.shift();
+      else this.#chunks[0] = c.subarray(k);
+    }
+    this.#size -= n;
+    return out;
+  }
+
+  /** Index of the first LF within the first `limit` buffered bytes, or -1. */
+  #newline(limit: number): number {
+    let base = 0;
+    for (const c of this.#chunks) {
+      const i = c.subarray(0, Math.max(0, limit - base)).indexOf(LF);
+      if (i >= 0) return base + i;
+      base += c.length;
+      if (base >= limit) break;
+    }
+    return -1;
+  }
+
+  /** One line with its LF, cut at `limit` bytes; shorter at the end of the stream, empty after it. */
+  async readline(limit: number): Promise<Uint8Array> {
+    for (;;) {
+      const i = this.#newline(limit);
+      if (i >= 0) return this.#take(i + 1);
+      if (this.#size >= limit) return this.#take(limit);
+      if (!(await this.#more())) return this.#take(this.#size);
+    }
+  }
+
+  /** `n` bytes, fewer at the end of the stream. */
+  async read(n: number): Promise<Uint8Array> {
+    while (this.#size < n && (await this.#more()));
+    return this.#take(Math.min(n, this.#size));
+  }
+}
+
+/** Options of HttpCapture.open(). */
+export interface HttpCaptureOptions {
+  /** A single-JPEG URL is fetched again at most this often a second (default 30). */
+  fps?: number;
+  /** s, connect and read timeout (default URL_TIMEOUT_S). */
+  timeout?: number;
+  /** Default: globalThis.fetch. */
+  fetch?: FetchLike;
+  /** Default: a RealClock. */
+  clock?: Clock;
+  /** Wall-clock seconds (default: Date.now() / 1000). */
+  wallTime?: () => number;
+}
+
+/**
+ * A `url:` camera's HTTP stream. A receive loop parses it and keeps only the newest JPEG; read()
+ * takes it. When the stream ends or fails the loop stops (`alive` false, `error` says why) and
+ * read() keeps returning null; Camera reopens it.
+ */
+export class HttpCapture {
+  readonly url: string;
+  readonly timeout: number;
+  /** s between fetches of a single-JPEG URL (0: as fast as it answers). */
+  readonly pollPeriod: number;
+  /** Why the receive loop stopped, or null. */
+  error: string | null = null;
+  /** JPEGs received. */
+  received = 0;
+  /** JPEGs replaced by a newer one before read() took them. */
+  dropped = 0;
+  /** JPEGs skipped because they were incomplete (no EOI at the end): never given by read(). */
+  incomplete = 0;
+  /** [wall-clock s, Clock s] arrival of the JPEG read() returned last (less the server's X-Frame-Age-Ms). */
+  lastTimes: [number, number] | null = null;
+
+  readonly #fetch: FetchLike;
+  readonly #clock: Clock;
+  readonly #wall: () => number;
+  readonly #signal = new Signal();
+  #jpeg: Uint8Array | null = null;
+  #times: [number, number] = [0, 0];
+  #seq = 0;
+  #taken = 0;
+  #closed = false;
+  #alive = true;
+  #abort: AbortController | null = null;
+  #reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+  private constructor(url: string, options: HttpCaptureOptions) {
+    const fps = options.fps ?? 30.0;
+    this.url = url;
+    this.timeout = options.timeout ?? URL_TIMEOUT_S;
+    this.pollPeriod = fps && fps > 0 ? 1.0 / fps : 0.0;
+    this.#clock = options.clock ?? new RealClock();
+    this.#wall = options.wallTime ?? (() => Date.now() / 1000);
+    const f = options.fetch ?? (globalThis as { fetch?: FetchLike }).fetch?.bind(globalThis);
+    if (!f) throw new ConnectError(`cannot open camera url:${url}: this runtime has no fetch()`);
+    this.#fetch = f;
+  }
+
+  /** Connect (ConnectError when it fails or serves neither an MJPEG stream nor a JPEG) and start receiving. */
+  static async open(url: string, options: HttpCaptureOptions = {}): Promise<HttpCapture> {
+    const capture = new HttpCapture(url, options);
+    const response = await capture.#connect();
+    const multipart = contentType(response.headers).startsWith("multipart/");
+    void capture.#receive(response, multipart);
+    return capture;
+  }
+
+  /** Is the receive loop still running? */
+  get alive(): boolean {
+    return this.#alive;
+  }
+
+  async #connect(): Promise<FetchResponseLike> {
+    const abort = new AbortController();
+    this.#abort = abort;
+    let cancel = (): void => undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      cancel = this.#clock.timer(this.timeout, () => {
+        reject(new Error("timed out"));
+        abort.abort();
+      });
+    });
+    let response: FetchResponseLike;
+    try {
+      response = await Promise.race([
+        this.#fetch(this.url, { headers: { "Cache-Control": "no-cache" }, signal: abort.signal, cache: "no-store" }), timedOut]);
+    } catch (e) {
+      abort.abort();
+      throw new ConnectError(`cannot open camera url:${this.url}: ${errorText(e) || errorName(e)}`, { cause: e });
+    } finally {
+      cancel();
+    }
+    if (response.status >= 400) {
+      abort.abort();
+      throw new ConnectError(`cannot open camera url:${this.url}: HTTP Error ${response.status}`);
+    }
+    const kind = contentType(response.headers);
+    if (!(kind.startsWith("multipart/") || kind.startsWith("image/")) || !response.body) {
+      abort.abort();
+      throw new ConnectError(`camera url:${this.url} serves ${response.body ? kind : "no body"}, not an MJPEG stream or a JPEG`);
+    }
+    return response;
+  }
+
+  /** The bytes of `response`, each read bounded by the timeout. */
+  #bytes(response: FetchResponseLike): ByteReader {
+    const reader = response.body!.getReader();
+    this.#reader = reader;
+    return new ByteReader(async () => {
+      let cancel = (): void => undefined;
+      const timedOut = new Promise<never>((_, reject) => {
+        cancel = this.#clock.timer(this.timeout, () => reject(new Error("timed out")));
+      });
+      try {
+        const { value, done } = await Promise.race([reader.read(), timedOut]);
+        return done ? null : value;
+      } finally {
+        cancel();
+      }
+    });
+  }
+
+  /** Publishes a JPEG as the newest frame; bytes that are not a JPEG are ignored, an incomplete one is counted. */
+  #offer(jpeg: Uint8Array, ageHeader: string | null | undefined): void {
+    if (!isJpeg(jpeg)) return;
+    if (isCompleteJpeg(jpeg)) this.#store(jpeg, ageHeader);
+    else this.incomplete += 1;
+  }
+
+  #store(jpeg: Uint8Array, ageHeader: string | null | undefined): void {
+    const now = this.#clock.now();
+    const wall = this.#wall();
+    let age = ageHeader == null ? 0.0 : Number(ageHeader) / 1000.0;
+    if (Number.isNaN(age)) age = 0.0;
+    age = Math.min(Math.max(age, 0.0), 10.0);
+    if (this.#seq !== this.#taken) this.dropped += 1;
+    this.#jpeg = jpeg;
+    this.#times = [wall - age, now - age];
+    this.#seq += 1;
+    this.received += 1;
+    this.#signal.notify();
+  }
+
+  async #receive(response: FetchResponseLike, multipart: boolean): Promise<void> {
+    try {
+      if (multipart) await this.#receiveParts(this.#bytes(response));
+      else await this.#receivePolled(response);
+    } catch (e) {
+      // The stream ended or failed: read() reports no frames, Camera reopens.
+      if (!this.#closed) this.error = `camera url:${this.url}: ${errorText(e) || errorName(e)}`;
+    } finally {
+      this.#abort?.abort();
+      this.#reader?.cancel().catch(() => undefined);
+      this.#alive = false;
+      this.#signal.notify();
+    }
+  }
+
+  async #line(bytes: ByteReader): Promise<Uint8Array> {
+    const line = await bytes.readline(MAX_LINE_BYTES + 1);
+    if (line.length > MAX_LINE_BYTES) throw new ValueError(`a header line longer than ${MAX_LINE_BYTES} bytes`);
+    return line;
+  }
+
+  /**
+   * multipart/x-mixed-replace: each part is headers, a blank line and one JPEG. Lines, headers and
+   * frames are bounded (MAX_LINE_BYTES, MAX_HEADERS, MAX_FRAME_BYTES).
+   */
+  async #receiveParts(bytes: ByteReader): Promise<void> {
+    const dashes = Uint8Array.of(DASH, DASH);
+    let line = await this.#line(bytes);
+    while (!this.#closed) {
+      if (!line.length) throw new Error("the stream ended");
+      if (!startsWith(line, dashes)) {
+        line = await this.#line(bytes); // preamble, or the blank line after a part
+        continue;
+      }
+      const boundary = stripBytes(line); // a closing boundary ("--frame--") is followed by the end of the stream
+      const closing = Uint8Array.from([...boundary, DASH, DASH]);
+      const headers = new Map<string, string>();
+      let lines = 0; // physical header lines: a repeated name counts each time
+      for (;;) {
+        let h = await this.#line(bytes);
+        if (!h.length) throw new Error("the stream ended inside a part");
+        h = stripBytes(h);
+        if (!h.length) break;
+        if (lines++ >= MAX_HEADERS) throw new ValueError(`a part with more than ${MAX_HEADERS} header lines`);
+        const colon = h.indexOf(0x3a);
+        const name = colon < 0 ? h : h.subarray(0, colon);
+        const value = colon < 0 ? new Uint8Array(0) : h.subarray(colon + 1);
+        headers.set(asciiLower(latin1(stripBytes(name))), latin1(stripBytes(value)));
+      }
+      const length = headers.get("content-length");
+      let jpeg: Uint8Array;
+      if (length !== undefined && /^[0-9]+$/.test(length)) {
+        const n = Number(length);
+        if (n > MAX_FRAME_BYTES) throw new ValueError(`a frame of ${n} bytes, larger than ${MAX_FRAME_BYTES}`);
+        jpeg = await bytes.read(n);
+        if (jpeg.length < n) throw new Error("the stream ended inside a frame");
+        line = await this.#line(bytes);
+      } else {
+        // No length: the JPEG runs up to the next boundary line (one that starts a line).
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        let atLineStart = true;
+        for (;;) {
+          line = await bytes.readline(65536);
+          if (!line.length) throw new Error("the stream ended inside a frame");
+          if (atLineStart && (sameBytes(stripBytes(line), boundary) || startsWith(line, closing))) break;
+          atLineStart = line[line.length - 1] === LF;
+          size += line.length;
+          if (size > MAX_FRAME_BYTES) throw new ValueError(`a frame larger than ${MAX_FRAME_BYTES} bytes`);
+          chunks.push(line);
+        }
+        jpeg = concatBytes(chunks, size);
+        if (jpeg.length >= 2 && jpeg[jpeg.length - 2] === 0x0d && jpeg[jpeg.length - 1] === LF) jpeg = jpeg.subarray(0, -2);
+      }
+      this.#offer(jpeg, headers.get("x-frame-age-ms"));
+    }
+  }
+
+  /** A single-JPEG URL, fetched again at most `fps` times a second. */
+  async #receivePolled(first: FetchResponseLike): Promise<void> {
+    let response = first;
+    while (!this.#closed) {
+      const started = this.#clock.now();
+      const jpeg = await this.#bytes(response).read(MAX_FRAME_BYTES + 1);
+      this.#reader?.cancel().catch(() => undefined);
+      if (jpeg.length > MAX_FRAME_BYTES) throw new ValueError(`a frame larger than ${MAX_FRAME_BYTES} bytes`);
+      this.#offer(jpeg, response.headers.get("x-frame-age-ms"));
+      const wait = this.pollPeriod - (this.#clock.now() - started);
+      if (wait > 0) await this.#clock.sleep(wait);
+      if (this.#closed) return;
+      response = await this.#connect();
+      if (this.#closed) return;
+    }
+  }
+
+  /** The newest JPEG if it is newer than the last one returned, else null within `timeout` s. */
+  async read(timeout = URL_READ_WAIT_S): Promise<Uint8Array | null> {
+    const ok = await this.#signal.wait(() => this.#seq !== this.#taken || !this.#alive, timeout, this.#clock);
+    if (!ok || this.#seq === this.#taken) return null;
+    this.#taken = this.#seq;
+    this.lastTimes = this.#times;
+    return this.#jpeg;
+  }
+
+  /** Stop receiving. Aborts the request and returns at once: never waits on the server. */
+  release(): void {
+    this.#closed = true;
+    this.#abort?.abort();
+    this.#reader?.cancel().catch(() => undefined);
+    this.#signal.notify();
+  }
+}
+
+/** The pixel size in a JPEG's start-of-frame segment, or null when it has none. */
+export function jpegSize(jpeg: Uint8Array): { width: number; height: number } | null {
+  let i = 2;
+  while (i + 9 < jpeg.length) {
+    if (jpeg[i] !== 0xff) return null;
+    const marker = jpeg[i + 1]!;
+    if (marker === 0xff) {
+      i += 1; // fill byte
+      continue;
+    }
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      i += 2;
+      continue;
+    }
+    const length = (jpeg[i + 2]! << 8) | jpeg[i + 3]!;
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: (jpeg[i + 5]! << 8) | jpeg[i + 6]!, width: (jpeg[i + 7]! << 8) | jpeg[i + 8]! };
+    }
+    if (marker === 0xd9 || marker === 0xda || length < 2) return null;
+    i += 2 + length;
+  }
+  return null;
+}
+
+/**
+ * A JPEG that stays encoded (where the runtime has no createImageBitmap, e.g. Node): its size comes
+ * from the JPEG header, `jpeg` holds the bytes, and Frame.toJpeg() returns them at that size.
+ */
+export class JpegImage implements VideoFrameLike {
+  readonly jpeg: Uint8Array;
+  readonly timestamp: number | null;
+  readonly displayWidth: number;
+  readonly displayHeight: number;
+
+  constructor(jpeg: Uint8Array, timestamp: number | null, width: number, height: number) {
+    this.jpeg = jpeg;
+    this.timestamp = timestamp;
+    this.displayWidth = width;
+    this.displayHeight = height;
+  }
+
+  clone(): JpegImage {
+    return new JpegImage(this.jpeg, this.timestamp, this.displayWidth, this.displayHeight);
+  }
+
+  close(): void {
+    // nothing to release
+  }
+}
+
+/**
+ * The default JpegDecoder: createImageBitmap into a VideoFrame where the runtime has both (pages and
+ * workers), else a JpegImage. Null for a JPEG that does not decode.
+ */
+export const decodeJpeg: JpegDecoder = async (jpeg, timestampUs) => {
+  const g = globalThis as {
+    createImageBitmap?: (blob: Blob) => Promise<{ close(): void }>;
+    VideoFrame?: new (source: unknown, init: { timestamp: number }) => VideoFrameLike;
+  };
+  if (typeof g.createImageBitmap === "function" && typeof g.VideoFrame === "function") {
+    try {
+      const bitmap = await g.createImageBitmap(new Blob([jpeg as Uint8Array<ArrayBuffer>], { type: "image/jpeg" }));
+      try {
+        return new g.VideoFrame(bitmap, { timestamp: timestampUs });
+      } finally {
+        bitmap.close();
+      }
+    } catch {
+      return null;
+    }
+  }
+  const size = jpegSize(jpeg);
+  return size ? new JpegImage(jpeg, timestampUs, size.width, size.height) : null;
+};
 
 // ── constraints ──
 
@@ -432,17 +965,20 @@ export class Frame {
    * same stream has confirmed the offset.
    */
   readonly ageEstimated: boolean;
+  /** A url: camera's frame: the JPEG as the server sent it; null for other cameras. */
+  readonly jpeg: Uint8Array | null;
   readonly #clock: Clock;
   readonly #canvas: CanvasFactory | undefined;
 
   constructor(image: VideoFrameLike, stamp: number, captured: number, clock: Clock, canvas?: CanvasFactory,
-              ageEstimated = false) {
+              ageEstimated = false, jpeg: Uint8Array | null = null) {
     this.image = image;
     this.stamp = stamp;
     this.captured = captured;
     this.#clock = clock;
     this.#canvas = canvas;
     this.ageEstimated = ageEstimated;
+    this.jpeg = jpeg;
   }
 
   /** Seconds since the capture, on the monotonic clock (a wall-clock step cannot change it). */
@@ -495,6 +1031,10 @@ export interface CameraOptions {
   canvas?: CanvasFactory;
   /** Default: console. */
   logger?: Logger;
+  /** url: cameras: default globalThis.fetch. */
+  fetch?: FetchLike;
+  /** url: cameras: default decodeJpeg. */
+  decode?: JpegDecoder;
 }
 
 /** Cameras open now, for the bandwidth hint when another fails to start. */
@@ -526,8 +1066,11 @@ export class Camera {
   readonly #wall: () => number;
   readonly #canvas: CanvasFactory | undefined;
   readonly #log: Logger;
+  readonly #fetch: FetchLike | undefined;
+  readonly #decode: JpegDecoder;
   readonly #signal = new Signal();
   #frame: VideoFrameLike | null = null;
+  #jpeg: Uint8Array | null = null;
   #stamp = 0;
   #captured = 0;
   #estimated = true;
@@ -541,6 +1084,12 @@ export class Camera {
   #session = 0;
   #stream: MediaStreamLike | null = null;
   #reader: ReadableStreamDefaultReader<VideoFrameLike> | null = null;
+  /** A url: camera's HTTP stream. */
+  #capture: HttpCapture | null = null;
+  /** JPEGs skipped by url: captures already released. */
+  #skippedBefore = 0;
+  /** A stream (or url: capture) is open. */
+  #live = false;
   /** Clock time of the last frame whose capture time advanced. */
   #lastFrame = 0;
   /** The current stream's timestamp calibration: offset, frames seen, last raw timestamp (µs). */
@@ -563,10 +1112,25 @@ export class Camera {
     this.#wall = options.wallTime ?? (() => Date.now() / 1000);
     this.#canvas = options.canvas;
     this.#log = options.logger ?? console;
+    this.#fetch = options.fetch;
+    this.#decode = options.decode ?? decodeJpeg;
   }
 
   get isOpen(): boolean {
     return this.#open;
+  }
+
+  /** Frames captured since this camera was created (every one, whether or not anyone read it). */
+  get frames(): number {
+    return this.#count;
+  }
+
+  /**
+   * For a url: camera, JPEGs that arrived but were replaced by a newer one before they were decoded
+   * (only the newest is kept); 0 for other cameras.
+   */
+  get skipped(): number {
+    return (this.#capture?.dropped ?? 0) + this.#skippedBefore;
   }
 
   /** The live capture stream (for a preview <video>), or null between streams. */
@@ -631,6 +1195,8 @@ export class Camera {
    * the camera's state only if `generation` is still current once the stream is there.
    */
   async #start(generation: number): Promise<void> {
+    const url = urlOf(this.id);
+    if (url !== null) return this.#startUrl(url, generation);
     const md = this.#md ?? navigatorMediaDevices();
     const deviceId = await resolveCamera(this.id, md);
     if (generation !== this.#generation) throw this.#closedWhileOpening();
@@ -673,6 +1239,7 @@ export class Camera {
     this.mode = mode;
     const session = ++this.#session;
     this.#stream = stream;
+    this.#live = true;
     this.#offset = Infinity;
     this.#calibrated = 0;
     this.#lastTs = -Infinity;
@@ -697,6 +1264,48 @@ export class Camera {
     const reader = readable.getReader();
     this.#reader = reader;
     void this.#pump(session, reader);
+  }
+
+  /** A url: camera: connect, then decode each newest JPEG the capture takes. */
+  async #startUrl(url: string, generation: number): Promise<void> {
+    const capture = await HttpCapture.open(url, { fps: this.fps, fetch: this.#fetch, clock: this.#clock, wallTime: this.#wall });
+    if (generation !== this.#generation || !this.#open) {
+      capture.release();
+      throw this.#closedWhileOpening();
+    }
+    const session = ++this.#session;
+    this.#capture = capture;
+    this.#live = true;
+    this.#lastFrame = this.#clock.now();
+    void this.#pumpUrl(session, capture);
+  }
+
+  /**
+   * Takes the capture's newest JPEG and decodes it. A capture that stopped leaves its error here;
+   * the watchdog reopens it once READ_FAILURE_S passed without a frame.
+   */
+  async #pumpUrl(session: number, capture: HttpCapture): Promise<void> {
+    while (session === this.#session) {
+      const jpeg = await capture.read();
+      if (session !== this.#session) return;
+      if (jpeg === null) {
+        if (capture.alive) continue;
+        this.error = capture.error ?? this.error;
+        return;
+      }
+      const [stamp, captured] = capture.lastTimes!;
+      let image: VideoFrameLike | null = null;
+      try {
+        image = await this.#decode(jpeg, Math.round(captured * 1e6));
+      } catch {
+        // not a picture: no frame
+      }
+      if (session !== this.#session) {
+        image?.close();
+        return;
+      }
+      if (image) this.#store(image, Math.min(this.#clock.now(), captured), false, stamp, jpeg);
+    }
   }
 
   async #pump(session: number, reader: ReadableStreamDefaultReader<VideoFrameLike>): Promise<void> {
@@ -732,13 +1341,19 @@ export class Camera {
       captured = Math.min(now, ts / 1e6 + this.#offset);
       estimated = this.#calibrated < 2;
     }
+    this.#store(image, captured, estimated, this.#wall() - (now - captured), null);
+  }
+
+  /** The newest frame is `image`. */
+  #store(image: VideoFrameLike, captured: number, estimated: boolean, stamp: number, jpeg: Uint8Array | null): void {
     const previous = this.#frame;
     this.#frame = image;
+    this.#jpeg = jpeg;
     this.#captured = captured;
     this.#estimated = estimated;
-    this.#stamp = this.#wall() - (now - captured);
+    this.#stamp = stamp;
     this.#count += 1;
-    this.#lastFrame = now;
+    this.#lastFrame = this.#clock.now();
     this.error = null;
     previous?.close();
     this.#signal.notify();
@@ -749,7 +1364,7 @@ export class Camera {
     this.#cancelWatch?.();
     const tick = () => {
       if (!this.#open || generation !== this.#generation) return;
-      if (this.#stream && this.#clock.now() - this.#lastFrame > READ_FAILURE_S) {
+      if (this.#live && this.#clock.now() - this.#lastFrame > READ_FAILURE_S) {
         this.#dead(this.error ?? `camera ${this.#name()} stopped returning frames`);
       }
       this.#cancelWatch = this.#clock.timer(WATCH_S, tick);
@@ -759,7 +1374,7 @@ export class Camera {
 
   /** The stream is dead: drop its newest frame, release it and reopen after REOPEN_S. */
   #dead(reason: string): void {
-    if (!this.#open || !this.#stream) return;
+    if (!this.#open || !this.#live) return;
     this.error = reason;
     this.#log.warn(`${reason}; reopening`);
     this.#release();
@@ -770,6 +1385,7 @@ export class Camera {
   #dropFrame(): void {
     this.#frame?.close();
     this.#frame = null;
+    this.#jpeg = null;
   }
 
   #scheduleReopen(generation: number): void {
@@ -792,6 +1408,13 @@ export class Camera {
 
   #release(): void {
     this.#session += 1;
+    this.#live = false;
+    const capture = this.#capture;
+    this.#capture = null;
+    if (capture) {
+      capture.release();
+      this.#skippedBefore += capture.dropped;
+    }
     this.#detach?.();
     this.#detach = null;
     const reader = this.#reader;
@@ -809,7 +1432,7 @@ export class Camera {
   }
 
   #current(): Frame {
-    return new Frame(this.#frame!.clone(), this.#stamp, this.#captured, this.#clock, this.#canvas, this.#estimated);
+    return new Frame(this.#frame!.clone(), this.#stamp, this.#captured, this.#clock, this.#canvas, this.#estimated, this.#jpeg);
   }
 
   /**

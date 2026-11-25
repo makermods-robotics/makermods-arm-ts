@@ -227,5 +227,72 @@ for (const arm of ARMS) {
         }
       }
     });
+
+    it("model and torques are bit for bit Python's when sin and cos are the C library's", () => {
+      // The remaining differences above come only from Math.sin / Math.cos: with the values Python's
+      // math module gave for the same angles (fixture gravity_trig), every torque has Python's bits.
+      const table = new Map<number, [number, number]>();
+      for (const [x, s, c] of fx.gravity_trig as [number, number, number][]) table.set(x, [s, c]);
+      const { sin, cos } = Math;
+      let missing = 0;
+      Math.sin = (x: number) => table.get(x)?.[0] ?? (missing++, sin(x));
+      Math.cos = (x: number) => table.get(x)?.[1] ?? (missing++, cos(x));
+      try {
+        const model = gravity.fromConfig(config, chain)!;
+        for (const c of fx.gravity_model) expect(compare(model.model(c.q), c.out).ulps).toBe(0);
+        for (const seq of fx.gravity_sequences) {
+          const init = seq.init;
+          const ff = init === "from_config"
+            ? gravity.fromConfig(config, chain)!
+            : new GravityFeedforward(chain, {
+              scale: init.scale, limitsNm: init.limits_nm, rampS: init.ramp_s, staleS: init.stale_s, jointScale: init.joint_scale,
+            });
+          for (const step of seq.steps) {
+            if (step.op === "reset") ff.reset();
+            else expect(compare(ff.torques(step.measured, step.ages, step.goal, step.now), step.out).ulps).toBe(0);
+          }
+        }
+      } finally {
+        Math.sin = sin;
+        Math.cos = cos;
+      }
+      expect(missing).toBe(0);
+    });
+
+    it("the float model follows changes to the chain's masses and signs", () => {
+      const c = chainFromConfig(config)!;
+      const q = [0.0, -15.0, 22.0, 0.0, 0.0, 0.0].slice(0, c.n).map(radians);
+      c.gravityTorques(q);
+      c.masses[3] = c.masses[3]! * 2.0;
+      c.sign.forEach((v, i) => (c.sign[i] = -v));
+      const numeric = q.map((_, i) => (c.potentialEnergy(q.map((v, j) => (j === i ? v + 1e-6 : v)))
+        - c.potentialEnergy(q.map((v, j) => (j === i ? v - 1e-6 : v)))) / 2e-6);
+      near(c.gravityTorques(q), numeric, 1e-6);
+      expect(c.gravityTorques(q)).not.toEqual(chainFromConfig(config)!.gravityTorques(q));
+    });
   });
 }
+
+// ── port of tests/unit/test_maker_gravity.py: the Maker model against holding torques measured on the arm ──
+describe("maker_arm: gravity model against measured holding torques", () => {
+  const measured: Json = loadFixture("math_maker_arm_gravity_measured.json");
+  const model = gravity.fromConfig(configOf(armFixture("maker_arm")))!;
+  const rms = (): number[] => {
+    const sq = new Array<number>(6).fill(0);
+    for (const c of measured.cases) {
+      const tau = model.model(c.q_deg.slice(0, 6).map(radians));
+      for (let i = 0; i < 6; i++) sq[i] = sq[i]! + (c.tau_nm[i] - tau[i]!) ** 2;
+    }
+    return sq.map((v) => Math.sqrt(v / measured.cases.length));
+  };
+
+  it("the shoulder term matches the measured holding torque", () => {
+    expect(rms()[1]).toBeLessThan(0.2);   // N*m; the friction measured at these poses is about 0.06
+  });
+
+  it("elbow and wrist terms stay as close as measured", () => {
+    const r = rms();
+    expect(r[2]).toBeLessThan(0.25);
+    expect(r[3]).toBeLessThan(0.2);
+  });
+});

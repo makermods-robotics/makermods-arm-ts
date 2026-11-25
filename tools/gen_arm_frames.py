@@ -5,6 +5,10 @@ it sends: contract/fixtures/arm_frames_<product>.json.
     ~/maker-arm-sdk/.venv/bin/python tools/gen_arm_frames.py --product maker
     ~/metal-arm-sdk/.venv/bin/python tools/gen_arm_frames.py --product metal
 
+To record another checkout of an SDK (a reference clone), put it first on PYTHONPATH; the fixture
+records the imported package's directory and its git commit (`sdk_path`, `sdk_commit`), and
+`--expect-under DIR` / `--expect-commit REV` refuse to write it when they differ.
+
 Each scenario is a list of operations (connect, enable, a control tick with new targets, a fault
 injected into a simulated motor, stop(), ...). Joints are named, not numbered. For every operation
 the fixture holds the frames the backend was asked to send, in order, as (CAN id, hex data,
@@ -17,8 +21,10 @@ time and `time.sleep(x)` advances it by exactly x. Threads (the control loop) ta
 at a time until it sleeps, waits for a reply, joins or waits for control ticks; then the next due
 one runs, in deadline order, ties in the order they started waiting. That is how VirtualClock runs
 async code, so the interleaving of the control loop with stop(), attach() and move_to() is the same
-on both sides. Python's frame spacing (`Arm._busy_wait_us(150)`) becomes a 150 us sleep and
-`Arm._wait_ticks` a wait that each tick wakes, as in the TypeScript port; a `threading.Event.wait`
+on both sides. Python's frame spacing (`Arm._busy_wait_us(us)`, FRAME_SPACING_S start to start)
+becomes a sleep of `us / 1e6` s and `Arm._wait_ticks` a wait that each tick wakes, as in the
+TypeScript port; move_ee plans in-process (`Arm.PLAN_IN_HELPER = False`), which takes no fake time,
+as the TypeScript replay's planning does with microtask pauses; a `threading.Event.wait`
 in the motor module (a typed-parameter reply) takes exactly its timeout when no reply comes.
 Python polling loops (`while ...: sleep(0.0005)`) still poll: on a path where a reply never comes
 they end up to one poll step later than the TypeScript wait, so scenarios with such a path compare
@@ -36,6 +42,7 @@ import importlib
 import json
 import logging
 import math
+import subprocess
 import threading
 import types
 from pathlib import Path
@@ -48,6 +55,11 @@ class Waiter:
     def __init__(self, name):
         self.name = name
         self.go = threading.Event()
+        self.interrupted = False
+
+
+class Interrupt:
+    """A SIGINT due for the main thread: it ends whatever sleep or wait the main thread is in."""
 
 
 class Sched:
@@ -76,6 +88,13 @@ class Sched:
                 continue
             self.t = max(self.t, entry[0])
             waiter = entry[2]
+            if isinstance(waiter, Interrupt):
+                # Ctrl-C: Python raises KeyboardInterrupt in the main thread, ending its sleep or wait at once.
+                waiter = self.main
+                for other in self.timers:
+                    if other[2] is waiter:
+                        other[3] = False
+                waiter.interrupted = True
             for c in list(self.conditions):   # a condition waiter's timeout fired
                 if c[1] is waiter:
                     self.conditions.remove(c)
@@ -96,6 +115,7 @@ class Sched:
         me = self.current
         self._timer(self.t + max(0.0, seconds), me)
         self._switch(me)   # whatever a notification made runnable runs first
+        self._raise_if_interrupted(me)
 
     def wait_until(self, predicate, timeout):
         if predicate():
@@ -104,7 +124,18 @@ class Sched:
         entry = self._timer(self.t + timeout, me) if timeout is not None else None
         self.conditions.append([predicate, me, entry])
         self._switch(me)
+        self._raise_if_interrupted(me)
         return predicate()
+
+    def interrupt_at(self, at):
+        """A Ctrl-C at time `at`; the entry is returned so an unused one can be cancelled."""
+        return self._timer(at, Interrupt())
+
+    @staticmethod
+    def _raise_if_interrupted(me):
+        if me.interrupted:
+            me.interrupted = False
+            raise KeyboardInterrupt
 
     def notify(self):
         for c in list(self.conditions):
@@ -196,12 +227,19 @@ def install(package):
     g = globals()
     arm_module = importlib.import_module(f"{package}.arm")
     motor_module = importlib.import_module(f"{package}.motor")
+    planner_module = importlib.import_module(f"{package}._planner")
     g["sim"] = importlib.import_module(f"{package}._sim_motor")
     g["ArmConfig"] = importlib.import_module(f"{package}.config").ArmConfig
     g["DEFAULT_PROFILE"] = importlib.import_module(f"{package}._product").DEFAULT_PROFILE
     Arm = g["Arm"] = arm_module.Arm
     arm_module.time = FakeTime
     motor_module.time = FakeTime
+    planner_module.time = FakeTime
+    Arm.PLAN_IN_HELPER = False
+    # No thread pinning or interpreter tuning in a fixture run.
+    arm_module.realtime = types.SimpleNamespace(
+        pin_to_fast_cpus=lambda: None,
+        switch_interval=types.SimpleNamespace(acquire=lambda: None, release=lambda: None))
     arm_module.threading = types.SimpleNamespace(
         Thread=FakeThread, current_thread=threading.current_thread, Event=threading.Event, Lock=threading.Lock,
         RLock=threading.RLock)
@@ -236,6 +274,19 @@ def shipped(**overrides):
     return dataclasses.replace(ArmConfig.from_yaml(str(DEFAULT_PROFILE)), **overrides)
 
 
+def at_times(events, apply):
+    """A thread that applies each event {"at": s, ...} at its time after now."""
+    if not events:
+        return
+
+    def body():
+        start = SCHED.t
+        for event in sorted(events, key=lambda e: e["at"]):
+            SCHED.sleep(max(0.0, start + event["at"] - SCHED.t))
+            apply(event)
+    SCHED.start(Waiter("events"), body)
+
+
 def run(scenario):
     global SCHED
     SCHED = Sched()
@@ -248,15 +299,25 @@ def run(scenario):
     bus = sim.SimBus(motors)
     frames = []
     send = bus.send
+    slow = {"s": 0.0, "count": 0}
 
     def recording_send(can_id, data, extended=True):
         frames.append([can_id, bytes(data).hex(), bool(extended)])
+        if slow["count"] > 0:
+            # a slow USB write: the send returns late
+            slow["count"] -= 1
+            SCHED.sleep(slow["s"])
         return send(can_id, data, extended)
 
     bus.send = recording_send
     arm = Arm(config, bus)
     dt = 1.0 / config.control_rate_hz
     steps = []
+    cancel = None
+
+    def sim_event(event):
+        setattr(motors[labels.index(event["joint"])], event["attr"], event["value"])
+
     for op in scenario["ops"]:
         frames.clear()
         result, error = None, None
@@ -286,7 +347,35 @@ def run(scenario):
             elif kind == "sim_watchdog":
                 sim.watchdog_timeout(motors[labels.index(op["joint"])])
             elif kind == "stop":
-                result = arm.stop()
+                at_times(op.get("events"), sim_event)
+                interrupt = op.get("interrupt_at")
+                # A second Ctrl-C: KeyboardInterrupt in stop()'s thread at that time, ending the sleep or wait it is in.
+                pending = None if interrupt is None else SCHED.interrupt_at(SCHED.t + interrupt)
+                try:
+                    result = arm.stop()
+                except KeyboardInterrupt:
+                    result = False   # the TypeScript stop() resolves false once its signal is aborted
+                finally:
+                    if pending is not None:
+                        pending[3] = False
+            elif kind == "move_ee":
+                n = arm.chain.n
+                if "xyz" not in op:   # recorded for the replay
+                    start = arm.chain.fk(arm.get_commanded_positions()[:n])[:3, 3]
+                    op["xyz"] = [float(v) for v in start + op["dxyz"]]
+                cancel = threading.Event()
+                if op.get("cancelled"):
+                    cancel.set()
+                result = arm.move_ee(op["xyz"], speed=op.get("speed"), timeout=op.get("timeout"),
+                                     wait=op.get("wait", True), cancel=cancel)
+            elif kind == "cancel":
+                cancel.set()
+            elif kind == "break_status":
+                def broken():
+                    raise OSError("send failed")
+                arm.motors[labels.index(op["joint"])].poll_status = broken
+            elif kind == "slow_send":
+                slow["s"], slow["count"] = op["s"], op["count"]
             elif kind == "return_to_rest":
                 result = arm.return_to_rest(op["rest"])
             elif kind == "move_to":
@@ -307,7 +396,7 @@ def run(scenario):
             result = sorted(result.items())
         steps.append({"frames": list(frames), "result": result, "error": error, "state": arm.state.value,
                       "commanded": arm.get_commanded_positions(), "fault_reason": arm.fault_reason,
-                      "t": SCHED.t})
+                      "loop_rate_hz": arm.loop_rate_hz, "rest_pose": arm.rest_pose, "t": SCHED.t})
     return steps
 
 
@@ -325,8 +414,12 @@ PRODUCTS = {
         "far": [0.5, -0.9, 1.3, 0.4, -0.3, 0.6, -1.2],
         "move": [0.3, -0.8, 1.0, 0.2, 0.1, -0.2, -0.6],
         "rest": [0.0, -0.3, 0.4, 0.0, 0.0, 0.0, -0.5],
+        # enabled a few degrees above the support (zero clipped into the limits: shoulder_lift -3.2, elbow_flex +2.8 deg)
+        "near_rest": [0.0, math.radians(-8.0), math.radians(9.0), math.radians(-1.2), 0.0, 0.0, -0.5],
         "gains": {"kp": [30.0, 80.0, 50.0, 15.0, 15.0, 15.0, 10.0], "kd": [2.0, 3.0, 2.0, 1.0, 1.0, 1.0, 0.3]},
         "variants": {"old_firmware": {"motor": {"params_supported": False}}},
+        # RobStride firmware without parameter access reports no torque state: a held arm is told by its torque.
+        "held_legacy": {"shoulder_lift": 0.4, "elbow_flex": 4.8, "wrist_flex": 1.5},
     },
     "metal": {
         "package": "metal_arm",
@@ -337,6 +430,8 @@ PRODUCTS = {
         "far": [0.5, -1.0, 1.4, 0.4, -0.3, 0.6, 1.5],
         "move": [0.3, -0.9, 1.1, 0.2, 0.1, -0.2, 0.8],
         "rest": [0.0, -0.4, 0.5, 0.0, 0.0, 0.0, 0.5],
+        # enabled a few degrees above the support (zero: shoulder_lift and elbow_flex at their limits)
+        "near_rest": [0.0, math.radians(-6.0), math.radians(7.0), math.radians(-2.0), 0.0, 0.0, 0.5],
         "gains": {"kp": [50.0, 60.0, 60.0, 30.0, 10.0, 10.0, 5.0], "kd": [3.0, 3.0, 3.0, 2.0, 0.4, 0.4, 0.3]},
         # The held reply to the gripper's first disable makes Arm._wait_reply time out (a polling loop):
         # time compares loosely from that disable on.
@@ -447,6 +542,60 @@ def build(product, gravity):
         ops += [{"op": "paced", "value": True}] + ticks(10, 20)
         ops += [{"op": "disable"}, {"op": "disconnect"}]
         out.append(scenario(f"gripper_blocked_paced_{tag}", ops, ov))
+        # stop() interrupted during the return (a second Ctrl-C): it ends holding at full gains, the loop running
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "sleep", "s": 0.1},
+               {"op": "set_targets", "targets": P["far"]}, {"op": "sleep", "s": 0.6},
+               {"op": "stop", "interrupt_at": 0.1237}, {"op": "sleep", "s": 0.1},
+               {"op": "set_targets", "targets": P["move"]}, {"op": "sleep", "s": 0.1}, {"op": "stop"}, {"op": "disconnect"}]
+        out.append(scenario(f"stop_interrupted_{tag}", ops, ov))
+        # a returning joint goes silent: the return is not verified and the arm holds
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "sleep", "s": 0.1},
+               {"op": "set_targets", "targets": P["far"]}, {"op": "sleep", "s": 0.6},
+               {"op": "stop", "events": [{"at": 0.1531, "joint": "elbow_flex", "attr": "online", "value": False}]},
+               {"op": "sleep", "s": 0.05}, {"op": "sim", "joint": "elbow_flex", "attr": "online", "value": True},
+               {"op": "disable"}, {"op": "clear_faults"}, {"op": "disconnect"}]
+        out.append(scenario(f"stop_silent_joint_{tag}", ops, ov, "disable"))
+        # near the support the return presses the weight-carrying joints toward it
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "sleep", "s": 0.1},
+               {"op": "set_targets", "targets": P["move"]}, {"op": "sleep", "s": 0.8},
+               {"op": "stop"}, {"op": "disconnect"}]
+        # the Maker profile sets rest_window_deg 12; the Metal one none, so the scenario sets the same
+        window = {} if shipped().rest_window is not None else {"rest_window": math.radians(12.0)}
+        out.append(scenario(f"rest_window_{tag}", ops, dict(ov, **window), start=P["near_rest"]))
+        # move_ee: one that arrives, one superseded by a newer target while it streams, one cancelled while it
+        # streams, one cancelled before it plans
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "sleep", "s": 0.1},
+               {"op": "move_ee", "dxyz": [0.0, 0.0, 0.02], "timeout": 5.0},
+               {"op": "move_ee", "dxyz": [0.02, 0.0, 0.0], "wait": False}, {"op": "sleep", "s": 0.0503},
+               {"op": "set_targets", "targets": P["move"]}, {"op": "sleep", "s": 0.4},
+               {"op": "move_ee", "dxyz": [0.0, 0.02, 0.0], "wait": False}, {"op": "sleep", "s": 0.0503},
+               {"op": "cancel"}, {"op": "sleep", "s": 0.2},
+               {"op": "move_ee", "dxyz": [0.0, 0.0, -0.02], "cancelled": True}, {"op": "sleep", "s": 0.05},
+               {"op": "stop"}, {"op": "disconnect"}]
+        # The trajectory IK's last ~1e-6 rad follow the rounding of numpy's linear solves (see the trajectory IK
+        # fixture tolerance): commanded positions compare to 1e-5 rad here; frames still compare byte for byte.
+        out.append(scenario(f"move_ee_{tag}", ops, ov, commanded_tol=1e-5))
+        # a status query that fails to go out counts as unanswered: the status deadline runs out
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": False}] + ticks(0, 30)
+        ops += [{"op": "break_status", "joint": "elbow_flex"}] + ticks(30, 220)
+        ops += [{"op": "disable"}, {"op": "clear_faults"}, {"op": "disconnect"}]
+        out.append(scenario(f"status_send_fails_{tag}", ops, ov))
+        # slow sends make late ticks: each is credited the time that really passed (up to four periods); the loop
+        # rate is measured
+        ops = [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "sleep", "s": 0.1},
+               {"op": "set_targets", "targets": P["far"]}, {"op": "sleep", "s": 0.05},
+               {"op": "slow_send", "s": 0.0123, "count": 4}, {"op": "sleep", "s": 0.3},
+               {"op": "slow_send", "s": 0.0031, "count": 40}, {"op": "sleep", "s": 1.5},
+               {"op": "stop"}, {"op": "disconnect"}]
+        out.append(scenario(f"late_ticks_{tag}", ops, ov))
+        # enable() refuses an arm another program holds on firmware without torque state; nothing is sent
+        if "held_legacy" in P:
+            ops = []
+            for joint, tau in P["held_legacy"].items():
+                ops += [{"op": "sim", "joint": joint, "attr": "enabled", "value": True},
+                        {"op": "sim", "joint": joint, "attr": "torque", "value": tau}]
+            ops += [{"op": "connect"}, {"op": "enable", "start_loop": True}, {"op": "disconnect"}]
+            out.append(scenario(f"held_legacy_refused_{tag}", ops, ov, motor={"params_supported": False}))
     return out
 
 
@@ -455,11 +604,21 @@ def main():
     ap.add_argument("--product", choices=sorted(PRODUCTS), required=True)
     ap.add_argument("--no-gravity", action="store_true", help="only the gravity_scale 0 scenarios")
     ap.add_argument("--out", help="default: contract/fixtures/arm_frames_<product>.json")
+    ap.add_argument("--expect-under", metavar="DIR", help="refuse unless the imported SDK package lies under DIR")
+    ap.add_argument("--expect-commit", metavar="REV", help="refuse unless the imported SDK's checkout is at REV")
     a = ap.parse_args()
-    install(PRODUCTS[a.product]["package"])
+    package = PRODUCTS[a.product]["package"]
+    install(package)
+    sdk_dir = Path(importlib.import_module(package).__file__).resolve().parent
+    commit = subprocess.run(["git", "-C", str(sdk_dir), "rev-parse", "--short", "HEAD"], capture_output=True,
+                            text=True).stdout.strip() or None
+    if a.expect_under and not sdk_dir.is_relative_to(Path(a.expect_under).expanduser().resolve()):
+        raise SystemExit(f"{package} imported from {sdk_dir}, not under {a.expect_under}")
+    if a.expect_commit and not (commit and (commit.startswith(a.expect_commit) or a.expect_commit.startswith(commit))):
+        raise SystemExit(f"{package} checkout is at {commit}, not {a.expect_commit}")
     out = Path(a.out) if a.out else ROOT / "contract" / "fixtures" / f"arm_frames_{a.product}.json"
-    fixture = {"source": f"{PRODUCTS[a.product]['package']}.arm", "product": a.product,
-               "control_rate_hz": shipped().control_rate_hz, "scenarios": []}
+    fixture = {"source": f"{package}.arm", "product": a.product, "sdk_path": str(sdk_dir), "sdk_commit": commit,
+               "gravity": not a.no_gravity, "control_rate_hz": shipped().control_rate_hz, "scenarios": []}
     total = 0
     for s in build(a.product, not a.no_gravity):
         s = dict(s)

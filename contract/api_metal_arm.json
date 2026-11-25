@@ -157,7 +157,8 @@
       ],
       "set_id": [
        "new_id",
-       "timeout"
+       "timeout",
+       "torque_off_confirmed"
       ],
       "set_zero": [],
       "validate": [
@@ -438,6 +439,7 @@
       "config",
       "fault_reason",
       "fault_reasons",
+      "loop_rate_hz",
       "motors",
       "rest_pose",
       "unconfirmed_disable"
@@ -445,6 +447,7 @@
      "constants": [
       "FLOAT_KD",
       "PARAM_TIMEOUT",
+      "PLAN_IN_HELPER",
       "REPLY_ATTEMPTS",
       "REPLY_TIMEOUT"
      ],
@@ -522,7 +525,9 @@
       "set_motor_id": [
        "old",
        "new",
-       "timeout"
+       "timeout",
+       "torque_off_confirmed",
+       "replacing"
       ],
       "set_zero": [
        "indices"
@@ -553,7 +558,17 @@
    "constants": [
     "EE_ANGLE_TOL",
     "EE_MIN_SECONDS",
-    "EE_POSITION_TOL"
+    "EE_POSITION_TOL",
+    "FRAME_SPACING_S",
+    "HEIGHT_JOINT_M_PER_RAD",
+    "HELD_TORQUE_NM",
+    "LOOP_RATE_WINDOW_S",
+    "MAX_TICK_PERIODS",
+    "REST_FRESH_S",
+    "REST_PRESS",
+    "REST_PRESS_NM",
+    "REST_RECHECK",
+    "SLOW_LOOP_SHARE"
    ],
    "functions": {}
   },
@@ -624,7 +639,9 @@
       ]
      },
      "properties": [
-      "is_open"
+      "frames",
+      "is_open",
+      "skipped"
      ]
     },
     "CameraInfo": {
@@ -650,14 +667,29 @@
     }
    },
    "constants": [
+    "MAX_FRAME_BYTES",
+    "MAX_HEADERS",
+    "MAX_LINE_BYTES",
     "READ_FAILURE_S",
     "REOPEN_S",
+    "URL_READ_WAIT_S",
+    "URL_SCHEMES",
+    "URL_TIMEOUT_S",
     "V4L_BY_PATH",
     "V4L_SYSFS"
    ],
    "functions": {
+    "is_camera_id": [
+     "text"
+    ],
     "list_cameras": [],
     "resolve": [
+     "camera_id"
+    ],
+    "url_camera_info": [
+     "camera_id"
+    ],
+    "url_of": [
      "camera_id"
     ]
    }
@@ -694,6 +726,7 @@
       "rest_timeout",
       "rest_arrived",
       "rest_settle",
+      "rest_window",
       "rest_stall_improvement",
       "rest_stall_polls",
       "joints"
@@ -773,7 +806,19 @@
      "methods": {},
      "properties": []
     },
+    "HeldByAnotherProgram": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
     "ParamTimeout": {
+     "constants": [],
+     "fields": [],
+     "methods": {},
+     "properties": []
+    },
+    "RouteUnverified": {
      "constants": [],
      "fields": [],
      "methods": {},
@@ -1532,7 +1577,8 @@
      "q_last",
      "rate_hz",
      "speed_cap",
-     "chunk"
+     "chunk",
+     "between"
     ],
     "straight_line": [
      "start",

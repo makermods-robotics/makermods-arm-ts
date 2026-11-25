@@ -35,7 +35,7 @@
  */
 
 import { Arm, type ArmOptions } from "./arm.js";
-import { Camera, type CameraOptions } from "./cameras.js";
+import { Camera, type CameraOptions, isCameraId } from "./cameras.js";
 import { ArmConfig, type RawProfile } from "./config.js";
 import { ArmError, ConnectError } from "./errors.js";
 import { ArmLeader, StarLeader } from "./leaders/index.js";
@@ -563,12 +563,13 @@ export class Rig {
   }
 
   /**
-   * A rig camera name's id; an id (`usb:`, `path:`, `index:`, `device:`, `label:`) passes through.
+   * A rig camera name's id; an id (`usb:`, `path:`, `index:`, `device:`, `label:`,
+   * `url:http...`) passes through.
    */
   cameraId(name: string): string {
     const id = this.cameras.get(name);
     if (id !== undefined) return id;
-    if ((CAMERA_ID_PREFIXES as readonly string[]).includes(name.split(":", 1)[0]!) && name.includes(":")) return name;
+    if (name.includes(":") && isCameraId(name)) return name;
     const known = [...this.cameras.keys()].join(", ") || "none";
     throw new RigError(`no camera named ${pyRepr(name)} in ${this.#where()} (cameras: ${known})`);
   }

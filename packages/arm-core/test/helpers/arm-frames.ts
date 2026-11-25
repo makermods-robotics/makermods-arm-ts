@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Arm, type ArmConfig, type CanBackend, type JointConfig, type Logger, type RawProfile } from "../../src/index.js";
-import { type SimulatedMotor, VirtualClock } from "../../src/testing.js";
+import { pythonFrameReplay, type SimulatedMotor, VirtualClock } from "../../src/testing.js";
 
 interface Op {
   op: string;
@@ -19,7 +19,17 @@ interface Step {
   state: string;
   commanded: number[];
   fault_reason: string | null;
+  loop_rate_hz: number | null;
+  rest_pose: number[] | null;
   t: number;
+}
+
+interface SimEvent {
+  /** s after the operation starts. */
+  at: number;
+  joint: string;
+  attr: string;
+  value: unknown;
 }
 
 interface Scenario {
@@ -33,6 +43,8 @@ interface Scenario {
   ops: Op[];
   steps: Step[];
   loose_time_from?: number;
+  /** Commanded positions compare within this (rad) instead of exactly. */
+  commanded_tol?: number;
 }
 
 /** What one arm package supplies to replay its fixture. */
@@ -63,12 +75,29 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
   const bus = p.bus(motors);
   let frames: Array<[number, string, boolean]> = [];
   const send = bus.send.bind(bus);
-  bus.send = (canId: number, data: Uint8Array, extended = true): Promise<void> => {
+  const slow = { s: 0.0, count: 0 };
+  bus.send = async (canId: number, data: Uint8Array, extended = true): Promise<void> => {
     frames.push([canId, hex(data), extended]);
+    if (slow.count > 0) {
+      // a slow USB write: the send returns late
+      slow.count -= 1;
+      await clock.sleep(slow.s);
+    }
     return send(canId, data, extended);
   };
-  const make = () => new Arm(config, bus, { clock, logger: silent });
-  const motor = (op: Op): M => motors[labels.indexOf(op.joint as string)]!;
+  const make = () => {
+    // attach() eases gravity in as the Python SDK does (the TypeScript default keeps a held arm's feed-forward).
+    const made = new Arm(config, bus, { clock, logger: silent, attachGravity: "ramp" });
+    // The Python generator plans in-process, which takes no fake time: plan without letting timers fire.
+    made["planPause"] = () => Promise.resolve();
+    pythonFrameReplay(made);
+    return made;
+  };
+  const motor = (op: Op | SimEvent): M => motors[labels.indexOf(String(op.joint))]!;
+  const simSet = (e: Op | SimEvent): void => {
+    (motor(e) as unknown as Record<string, unknown>)[camel(e.attr as string)] = e.value;
+  };
+  let cancel: AbortController | null = null;
   let arm = make();
   const dt = 1.0 / config.controlRateHz;
   const steps: Step[] = [];
@@ -102,7 +131,7 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
           await clock.sleep(op.s as number);
           break;
         case "sim":
-          (motor(op) as unknown as Record<string, unknown>)[camel(op.attr as string)] = op.value;
+          simSet(op);
           break;
         case "paced":
           bus.feedbackPacedControl = op.value as boolean;
@@ -110,8 +139,30 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
         case "sim_watchdog":
           p.watchdogTimeout(motor(op));
           break;
-        case "stop":
-          result = await arm.stop();
+        case "stop": {
+          for (const event of (op.events as SimEvent[] | undefined) ?? []) clock.timer(event.at, () => simSet(event));
+          const interrupt = new AbortController();
+          if (op.interrupt_at !== undefined) clock.timer(op.interrupt_at as number, () => interrupt.abort());
+          result = await arm.stop({ signal: interrupt.signal });
+          break;
+        }
+        case "move_ee":
+          cancel = new AbortController();
+          if (op.cancelled) cancel.abort();
+          result = await arm.moveEe(op.xyz as number[], {
+            speed: (op.speed as number | undefined) ?? undefined, timeout: (op.timeout as number | undefined) ?? undefined,
+            wait: (op.wait as boolean | undefined) ?? true, signal: cancel.signal,
+          });
+          break;
+        case "cancel":
+          cancel!.abort();
+          break;
+        case "break_status":
+          arm.motors[labels.indexOf(op.joint as string)]!.pollStatus = () => Promise.reject(new Error("send failed"));
+          break;
+        case "slow_send":
+          slow.s = op.s as number;
+          slow.count = op.count as number;
           break;
         case "return_to_rest":
           result = await arm.returnToRest(op.rest as number[]);
@@ -151,7 +202,7 @@ async function replay<M extends SimulatedMotor>(p: FrameReplayProduct<M>, s: Sce
     }
     steps.push({
       frames, result: result ?? null, error, state: arm.state, commanded: arm.getCommandedPositions(),
-      fault_reason: arm.faultReason, t: clock.now(),
+      fault_reason: arm.faultReason, loop_rate_hz: arm.loopRateHz, rest_pose: arm.restPose, t: clock.now(),
     });
   }
   return steps;
@@ -183,9 +234,15 @@ export function replayArmFrames<M extends SimulatedMotor>(p: FrameReplayProduct<
           expect(got.result, `${where}: result`).toEqual(want.result);
           expect(got.state, `${where}: state`).toBe(want.state);
           expect(got.fault_reason, `${where}: fault reason`).toBe(want.fault_reason);
-          const exact = got.commanded.length === want.commanded.length
-            && got.commanded.every((v, n) => Object.is(v, want.commanded[n]));
-          expect(exact, `${where}: commanded ${JSON.stringify(got.commanded)} vs ${JSON.stringify(want.commanded)}`).toBe(true);
+          const same = (a: number[] | null, b: number[] | null): boolean =>
+            a === null || b === null ? a === b : a.length === b.length && a.every((v, n) => Object.is(v, b[n]));
+          const tol = s.commanded_tol;
+          const close = tol === undefined ? same(got.commanded, want.commanded)
+            : got.commanded.length === want.commanded.length && got.commanded.every((v, n) => Math.abs(v - want.commanded[n]!) <= tol);
+          expect(close, `${where}: commanded ${JSON.stringify(got.commanded)} vs ${JSON.stringify(want.commanded)}`).toBe(true);
+          expect(same(got.rest_pose, want.rest_pose),
+            `${where}: rest pose ${JSON.stringify(got.rest_pose)} vs ${JSON.stringify(want.rest_pose)}`).toBe(true);
+          expect(got.loop_rate_hz, `${where}: loop rate`).toBe(want.loop_rate_hz);
           if (s.loose_time_from === undefined || i < s.loose_time_from) {
             expect(got.t, `${where}: time`).toBe(want.t);
           } else {

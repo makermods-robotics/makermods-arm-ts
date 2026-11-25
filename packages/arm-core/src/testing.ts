@@ -4,6 +4,9 @@
  */
 
 import { Arm, type Logger } from "./arm.js";
+
+/** Frame-replay tests only: make an Arm send the frames the Python SDK sends where this SDK is stricter. */
+export { pythonFrameReplay } from "./arm.js";
 import type { Clock } from "./clock.js";
 import type { ArmConfig, JointConfig } from "./config.js";
 import { ValueError } from "./errors.js";
@@ -63,6 +66,15 @@ export class VirtualClock implements Clock {
 
   sleep(seconds: number): Promise<void> {
     return new Promise<void>((resolve) => this.timer(seconds, resolve));
+  }
+
+  /**
+   * One microtask: in virtual time every simulated completion due before a timer has already been
+   * delivered when it fires (timers fire in deadline order, each after everything the previous one
+   * woke), so nothing else is pending, and no timer may fire in between (tests stay deterministic).
+   */
+  yieldToIo(): Promise<void> {
+    return Promise.resolve();
   }
 
   /** Timers still waiting. */
@@ -289,17 +301,18 @@ export async function simulatedGroup<M extends SimulatedMotor, O>(simulation: Si
 }
 
 /**
- * Each control tick of `arm` advances its commands by the time since the previous tick, between
- * one and SIM_MAX_TICK_PERIODS periods.
+ * Each control tick of `arm` advances its commands by the time since the previous tick, at most
+ * SIM_MAX_TICK_PERIODS periods.
  */
 function followTheClock(arm: Arm): void {
   const tick = arm["tick"].bind(arm);
   let last: number | null = null;
-  arm["tick"] = (dt: number, session: number | null = null): Promise<void> => {
+  const period = 1.0 / arm.config.controlRateHz;
+  arm["tick"] = (dt: number, session: number | null = null, poll = true): Promise<void> => {
     const now = arm.clock.now();
     const elapsed = last === null ? dt : now - last;
     last = now;
-    return tick(Math.min(Math.max(dt, elapsed), SIM_MAX_TICK_PERIODS * dt), session);
+    return tick(Math.min(Math.max(0.0, elapsed), SIM_MAX_TICK_PERIODS * period), session, poll);
   };
 }
 

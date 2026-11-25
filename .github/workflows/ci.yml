@@ -81,8 +81,8 @@ jobs:
     # The generated profiles, API manifests and codec fixtures still match the Python SDKs.
     runs-on: ubuntu-latest
     env:
-      MAKER_ARM_SDK_REF: 0ca54de
-      METAL_ARM_SDK_REF: 7d2a3c8
+      MAKER_ARM_SDK_REF: 28621d6
+      METAL_ARM_SDK_REF: 36c0bb4
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

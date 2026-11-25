@@ -332,7 +332,7 @@ describe("motor", () => {
   it("setId refuses an enabled motor and bad ids", async () => {
     const fake = new SimMotor(3, "jlo", { enabled: true });
     const { motor } = wired([fake]);
-    await expect(motor.setId(9, 0.02)).rejects.toThrow(/disable/);
+    await expect(motor.setId(9, 0.02)).rejects.toThrow(/reports torque on; disable/);
     expect(fake.sendId).toBe(3);
     await expect(motor.setId(16)).rejects.toThrow(ValueError);
     await motor.setId(3); // no-op

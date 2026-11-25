@@ -206,6 +206,12 @@ export interface ArmConfigInit {
   restArrived?: number;
   /** Accepted after a stall. */
   restSettle?: number;
+  /**
+   * Enabled within this (rad) of the supported rest pose (each joint that carries the arm's
+   * weight), the return to rest presses those joints a little toward it instead of stopping where
+   * the enable found them. null: off.
+   */
+  restWindow?: number | null;
   restStallImprovement?: number;
   restStallPolls?: number;
 }
@@ -237,6 +243,7 @@ const armDefaults = () => ({
   restTimeout: 10.0,
   restArrived: radians(2.0),
   restSettle: radians(6.0),
+  restWindow: null as number | null,
   restStallImprovement: radians(0.25),
   restStallPolls: 15,
 });
@@ -291,6 +298,7 @@ export class ArmConfig {
   restTimeout!: number;
   restArrived!: number;
   restSettle!: number;
+  restWindow!: number | null;
   restStallImprovement!: number;
   restStallPolls!: number;
   joints: JointConfig[];
@@ -376,6 +384,9 @@ export class ArmConfig {
     ] as const;
     for (const name of positive) {
       if (!(this[name] > 0)) throw new ValueError(`${name} must be >0, got ${this[name]}`);
+    }
+    if (this.restWindow !== null && !(isNumber(this.restWindow) && this.restWindow > 0)) {
+      throw new ValueError(`restWindow must be >0, got ${String(this.restWindow)}`);
     }
     if (!(this.limitMargin >= 0) || !(this.fullTurnGrace >= 0)) {
       throw new ValueError("limitMargin and fullTurnGrace must be >=0");

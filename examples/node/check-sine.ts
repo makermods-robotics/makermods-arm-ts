@@ -11,7 +11,8 @@
  *
  * This energizes the arm and moves it: start it with the arm resting where it may be released,
  * keep the workspace clear and a hand on the power switch. Ctrl-C stops the motion and returns the
- * arm to rest. If the return cannot be verified the arm is left holding, never released in the air.
+ * arm to rest; a second Ctrl-C ends the return where it is and the arm holds. If the return cannot
+ * be verified the arm is left holding at full gains, never released in the air.
  * The adapter must be listed for that product in the rig file (see common.ts).
  */
 
@@ -203,26 +204,79 @@ async function leaveHolding(arm: Arm): Promise<string> {
   return "holding";
 }
 
-/** Return to rest and release torque, or leave the arm holding. Returns the outcome. */
-async function windDown(arm: Arm): Promise<string> {
+/**
+ * Return to rest and release torque, or leave the arm holding. Aborting `signal` (a second
+ * Ctrl-C) ends the return where it is: stop() then leaves the arm holding. Returns the outcome.
+ */
+async function windDown(arm: Arm, signal: AbortSignal): Promise<string> {
   if (arm.state !== ArmState.ENABLED && arm.state !== ArmState.FAULT) return "not_enabled";
   console.log("returning to the rest pose...");
   let verified = false;
   try {
-    verified = await arm.stop();
+    verified = await arm.stop({ signal });
   } catch (e) {
     console.error(`return to rest failed: ${e instanceof Error ? e.message : e}`);
   }
   if (verified) {
-    if (arm.unconfirmedDisable.length) {
-      console.error(`rest pose reached, but torque off was not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; cut motor power if they hold`);
-      return "unconfirmed";
-    }
     console.log("rest pose reached; torque released");
     return "rest";
   }
+  if ((arm.state as ArmState) === ArmState.CONNECTED && arm.unconfirmedDisable.length) {
+    // stop() sent the release but some motor did not confirm it: never reported as a release.
+    console.error(`rest pose reached, but torque off was not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; cut motor power if they hold`);
+    return "unconfirmed";
+  }
   console.error("could not verify the return to rest; the arm is holding its pose");
   return leaveHolding(arm);
+}
+
+/**
+ * Keep this process servicing the arm until it is safe to exit: an energized arm stays held (and
+ * leaveHolding() is tried again) until it has detached or been released; a release some motor did
+ * not confirm is tried again until it is. Never returns while the arm may be holding with nobody
+ * commanding it.
+ */
+async function untilSafe(arm: Arm, then: string): Promise<string> {
+  for (;;) {
+    if (arm.state === ArmState.ENABLED || arm.state === ArmState.FAULT) {
+      if (!arm.loopRunning) {
+        // Nothing services the hold (the control loop stopped, e.g. after a failed bus close):
+        // retrying would only spin. Say so and release only once a person confirms it is safe.
+        console.error("the control loop is not running, so this process cannot keep the arm holding; its motors hold "
+          + "their last command until their watchdogs act. Type RELEASE and press ENTER once it is safe to release torque");
+        await releaseTyped();
+        try {
+          await arm.disable();
+        } catch (e) {
+          console.error(`disable failed: ${e instanceof Error ? e.message : e}`);
+        }
+        continue;
+      }
+      try {
+        then = await leaveHolding(arm);
+        continue;
+      } catch (e) {
+        console.error(`could not leave the arm holding cleanly (${e instanceof Error ? e.message : e}); `
+          + "this process keeps holding it and tries again");
+        arm.holdCurrentPosition();
+        await arm.clock.sleep(1.0);
+        continue;
+      }
+    }
+    if (arm.state === ArmState.CONNECTED && arm.unconfirmedDisable.length) {
+      console.error(`torque off still not confirmed on motors ${JSON.stringify(arm.unconfirmedDisable)}; trying again. `
+        + "Cut motor power if they hold");
+      try {
+        await arm.disable();
+      } catch (e) {
+        console.error(`disable failed: ${e instanceof Error ? e.message : e}`);
+      }
+      if (arm.unconfirmedDisable.length) await arm.clock.sleep(2.0);
+      else then = "released";
+      continue;
+    }
+    return then;
+  }
 }
 
 const args = parseArgs(process.argv.slice(2), {
@@ -254,13 +308,21 @@ const arm = new Arm(config, backend);
 console.log(`will enable ${args.product} (${backend.port}) and run a ${a.sine} deg, ${a.period} s sine for ${a.cycles} cycles `
   + `(peak ${deg(peak).toFixed(0)} deg/s), then: rest`);
 
-// Ctrl-C and SIGTERM stop the motion; the arm then returns to rest. Repeating them changes nothing:
-// nothing here releases an arm that is in the air.
+// The first Ctrl-C or SIGTERM stops the motion; the arm then returns to rest. A second one ends the
+// return where it is and the arm keeps holding at full gains. Nothing here releases an arm that is
+// in the air.
 const stop = new AbortController();
+const interruptRest = new AbortController();
 for (const name of ["SIGINT", "SIGTERM"] as const) {
   process.on(name, () => {
-    if (stop.signal.aborted) console.error("already stopping: the arm returns to rest, or keeps holding if that cannot be verified");
-    stop.abort();
+    if (!stop.signal.aborted) {
+      stop.abort();
+    } else if (!interruptRest.signal.aborted) {
+      console.error("interrupted again: the return to rest stops here and the arm keeps holding");
+      interruptRest.abort();
+    } else {
+      console.error("already stopping: the arm keeps holding");
+    }
   });
 }
 
@@ -285,21 +347,14 @@ try {
   failure = e;
 } finally {
   try {
-    then = await windDown(arm);
+    then = await windDown(arm, interruptRest.signal);
   } catch (e) {
     console.error(`wind-down failed: ${e instanceof Error ? e.message : e}`);
     then = "failed";
   }
-  if (arm.state === ArmState.ENABLED || arm.state === ArmState.FAULT) {
-    // Still energized after a failed wind-down: leave it holding rather than closing the bus on it.
-    try {
-      then = await leaveHolding(arm);
-    } catch (e) {
-      console.error(`could not leave the arm holding cleanly: ${e instanceof Error ? e.message : e}`);
-    }
-  } else if (arm.state !== ArmState.DISCONNECTED) {
-    await arm.disconnect();
-  }
+  // Still energized after a failed wind-down, or a release not confirmed: keep servicing the arm.
+  then = await untilSafe(arm, then);
+  if (arm.state !== ArmState.DISCONNECTED) await arm.disconnect();
 }
 
 // Everything below runs with the arm at rest or handed over: analysis and files never delay the control loop.

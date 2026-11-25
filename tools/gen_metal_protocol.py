@@ -12,12 +12,14 @@ strings "nan", "inf", "-inf". Bytes are hex strings. A call that raises is {"err
 import argparse
 import json
 import math
+import os
 import random
 import struct
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path.home() / "metal-arm-sdk" / "tests"))   # fakes.py (classify, feedback_bytes)
+# fakes.py (classify, feedback_bytes); METAL_ARM_SDK_DIR names another checkout of the SDK
+sys.path.insert(0, str(Path(os.environ.get("METAL_ARM_SDK_DIR", Path.home() / "metal-arm-sdk")) / "tests"))
 
 from metal_arm import _sim_motor as sim  # noqa: E402
 from metal_arm import motor as m  # noqa: E402

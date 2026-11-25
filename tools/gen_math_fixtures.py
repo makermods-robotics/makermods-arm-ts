@@ -6,9 +6,13 @@ Run with each arm SDK's own interpreter; each run writes that arm's files, plus 
     ~/maker-arm-sdk/.venv/bin/python tools/gen_math_fixtures.py
     ~/metal-arm-sdk/.venv/bin/python tools/gen_math_fixtures.py
 
+MAKER_ARM_SDK_DIR and METAL_ARM_SDK_DIR name other checkouts of the SDKs (default ~/maker-arm-sdk, ~/metal-arm-sdk);
+put the same checkout on PYTHONPATH so the imported package is that one.
+
 Writes to contract/fixtures/:
     math_<arm>.json                      inputs and the Python SDK's outputs on the arm's shipped profile
     math_<arm>_gravity_fixtures.json     copy of the SDK's tests/unit/gravity_fixtures.json (+ URDF text)
+    math_<arm>_gravity_measured.json     copy of the SDK's tests/unit/gravity_measured.json, where it has one
     math_<arm>_trajectory_ik_fixtures.json  copy of the SDK's tests/unit/trajectory_ik_fixtures.json
     math_common.json                     rotations and pose-path helpers
     math_fma.json                        fused multiply-add reference values (exact rational arithmetic)
@@ -22,6 +26,7 @@ import argparse
 import importlib
 import json
 import math
+import os
 import sys
 import time
 from fractions import Fraction
@@ -33,8 +38,9 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "contract" / "fixtures"
 HOME = Path.home()
-ARMS = {"maker-arm": ("maker_arm", HOME / "maker-arm-sdk", "maker_arm_v1.yaml"),
-        "metal-arm": ("metal_arm", HOME / "metal-arm-sdk", "metal_arm_v1.yaml")}
+ARMS = {"maker-arm": ("maker_arm", Path(os.environ.get("MAKER_ARM_SDK_DIR", HOME / "maker-arm-sdk")), "maker_arm_v1.yaml"),
+        "metal-arm": ("metal_arm", Path(os.environ.get("METAL_ARM_SDK_DIR", HOME / "metal-arm-sdk")), "metal_arm_v1.yaml")}
+VENVS = {"maker-arm": HOME / "maker-arm-sdk", "metal-arm": HOME / "metal-arm-sdk"}
 
 
 def enc(x):
@@ -64,6 +70,29 @@ def write(name, data):
     path = OUT / name
     path.write_text(json.dumps(enc(data), allow_nan=False, separators=(",", ":")) + "\n")
     print("wrote", path.relative_to(ROOT), f"({path.stat().st_size // 1024} KiB)")
+
+
+class TrigRecorder:
+    """Stands in for ``math`` in a module while recording, records [x, sin(x), cos(x)] for every sin/cos taken."""
+
+    def __init__(self, module):
+        self.module, self.seen = module, {}
+        module.math = self
+
+    def __getattr__(self, name):
+        return getattr(math, name)
+
+    def sin(self, x):
+        self.seen[x] = [x, math.sin(x), math.cos(x)]
+        return math.sin(x)
+
+    def cos(self, x):
+        self.seen[x] = [x, math.sin(x), math.cos(x)]
+        return math.cos(x)
+
+    def stop(self):
+        self.module.math = math
+        return sorted(self.seen.values())
 
 
 def fma(a, b, c):
@@ -241,7 +270,8 @@ def arm_fixture(arm, sdk, sdk_dir, profile_name):
     iks.append(ik_entry(chain.fk(q_mid + 0.4), q_mid, tol=1e-6, rot_tol=1e-5, rot_weight=0.5, null_gain=0.0,
                         max_step=0.1, limits=limits))
 
-    # gravity feed-forward
+    # gravity feed-forward; every sin/cos the float gravity model takes is recorded (gravity_trig)
+    trig = TrigRecorder(K)
     ff = G.from_config(config, chain)
     rest = np.clip(np.array((config.ik or {}).get("rest_pose", np.zeros(n))), soft_lo, soft_hi)
 
@@ -283,6 +313,7 @@ def arm_fixture(arm, sdk, sdk_dir, profile_name):
                                            "joint_scale": [j.gravity_factor for j in joints]},
                  "steps": sequence(half, 60, 3)})
     model = [{"q": q, "out": ff.model(q)} for q in qs[:20]] + [{"q": [math.inf] + list(qs[0][1:]), "out": ff.model([math.inf] + list(qs[0][1:]))}]
+    gravity_trig = trig.stop()
 
     # trajectory IK
     ik = TI.TrajectoryIK.from_config(config, chain=chain)
@@ -360,7 +391,7 @@ def arm_fixture(arm, sdk, sdk_dir, profile_name):
                   "upper": chain.upper, "mount": chain.mount, "sign": chain.sign, "offset": chain.offset},
         "kinematics": kin, "custom_gravity": custom_g, "batch": {"qs": batch, "poses": poses, "jacobians": jacs},
         "variants": variants, "ik": iks,
-        "gravity_model": model, "gravity_sequences": seqs,
+        "gravity_model": model, "gravity_sequences": seqs, "gravity_trig": gravity_trig,
         "trajectory": {"info": info, "caps": caps_cases, "bounds": bounds, "solve_tick": ticks, "solve": solves,
                        "feed": feeds, "step": steps, "solve_path": paths,
                        "pose_residual": {"q": qr, "targets": rtargets, "poses": rposes, "jacobians": rjacs, "r": rr,
@@ -373,11 +404,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arm", choices=sorted(ARMS), help="default: the SDK whose interpreter runs this script")
     a = ap.parse_args()
-    arm = a.arm or next((name for name, (_, d, _) in ARMS.items() if str(d) in sys.executable), None)
+    arm = a.arm or next((name for name, d in VENVS.items() if str(d) in sys.executable), None)
     if arm is None:
         ap.error("run with an arm SDK's .venv/bin/python or pass --arm")
     package, sdk_dir, profile_name = ARMS[arm]
     sdk = importlib.import_module(package)
+    if not Path(sdk.__file__).resolve().is_relative_to(sdk_dir.resolve()):
+        ap.error(f"{package} is imported from {sdk.__file__}, not from {sdk_dir}: set PYTHONPATH")
     for sub in ("kinematics", "trajectory_ik", "gravity", "config"):
         importlib.import_module(f"{package}.{sub}")
     import subprocess
@@ -390,6 +423,9 @@ def main() -> int:
     grav = json.loads((unit / "gravity_fixtures.json").read_text())
     grav["chain"]["urdf_text"] = (sdk_dir / grav["chain"]["urdf"]).read_text()
     write(f"math_{arm.replace('-', '_')}_gravity_fixtures.json", grav)
+    measured = unit / "gravity_measured.json"
+    if measured.exists():
+        write(f"math_{arm.replace('-', '_')}_gravity_measured.json", json.loads(measured.read_text()))
     write(f"math_{arm.replace('-', '_')}_trajectory_ik_fixtures.json",
           json.loads((unit / "trajectory_ik_fixtures.json").read_text()))
     write("math_common.json", common_fixture(sdk))
