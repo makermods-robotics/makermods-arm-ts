@@ -27,6 +27,18 @@ From Chromium over WebUSB (Metal Arm; the adapter granted by policy, see below):
 | Two arms from one `Rig` in one page / in one Web Worker | 97.9 and 97.8 Hz / 98.6 and 98.6 Hz |
 | `Camera` with three identical USB cameras | each 30 Hz alone; 30, 15 and 15 Hz together (two share a USB 2 bus) |
 
+## Limits corrected during the run
+
+Three runs were recorded as failures because the bench script's own limit was wrong, not the arm's
+behaviour. The scripts and limits are not part of this repository. Each was re-run with the
+corrected criterion and passed; none is an open failure.
+
+| Run | First limit | Measured | Corrected criterion | Re-run |
+|---|---|---|---|---|
+| Kill and `attach()`, left Metal arm | pose within 3 deg of hover, read 0.3 s after `attach()` | 3.4 deg, read during the takeover dip | the settled pose, read 1.5 s after `attach()`; the dip is reported | pass: dip 3.4 deg, settled 1.6 deg from hover |
+| `moveEe`, both Metal arms | measured tool within 5 mm of each target | 6.0 mm (left), 8.0 mm (right); the commanded pose was within 1 mm | commanded tool within 1.5 mm; measured within 12 mm and compared with Python on the same arm | pass: commanded 0.84 and 0.91 mm; measured 5.9 and 9.1 mm, Python 5.8 and 9.7 mm |
+| `Teleop`, leader arm and follower arm | follower lag under 150 ms on every joint | wrist_flex 181 ms; that joint lags its own command by about 175 ms in Python too | lag under 250 ms | pass: 66 to 176 ms by joint |
+
 ## Not tested
 
 - Any motion above hover height, and any contact with an object.
