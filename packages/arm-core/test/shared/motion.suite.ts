@@ -358,6 +358,51 @@ export function motionSuite<M extends FakeMotorLike>(fk: ArmFakes<M>): void {
     });
   });
 
+  describe("a cancel during a slow tick", () => {
+    it("ends with hold frames at the measured pose and nothing after them", async () => {
+      const { arm, sim, clock } = await enabled();
+      try {
+        instantPlanning(arm);
+        const lift = 1;
+        const cancel = new AbortController();
+        const moving = arm.moveEe(goalFrom(arm, [0.0, 0.0, 0.04]), { speed: 0.5, wait: true, signal: cancel.signal });
+        await clock.sleep(0.1); // streaming
+        // The next command to shoulder_pan is slow; the cancel lands while it is in flight.
+        const bus = arm.backend as unknown as { send: (id: number, d: Uint8Array, e?: boolean) => Promise<void> };
+        const send = bus.send.bind(bus);
+        let armed = true, aborted = false;
+        bus.send = async (id: number, d: Uint8Array, e?: boolean) => {
+          if (armed && id === arm.motors[0]!.motorId && d.length === 8 && !d.slice(0, 6).every((b) => b === 0xff)) {
+            armed = false;
+            await send(id, d, e);
+            await clock.sleep(0.003);
+            cancel.abort();
+            aborted = true;
+            return;
+          }
+          return send(id, d, e);
+        };
+        expect(await moving).toBe(false);
+        expect(aborted).toBe(true);
+        await clock.sleep(0.05); // the hold is installed within a row of the cancel
+        const held = [...arm["userTargets"]];
+        expect(close(held, arm.getJointPositions(), 0.02)).toBe(true); // the measured pose, not the row in flight
+        const mark = sim.motor("shoulder_lift").frames.length;
+        await clock.sleep(0.3);
+        expect(arm["userTargets"]).toEqual(held); // no row of the cancelled motion afterwards
+        const after = sim.motor("shoulder_lift").frames.slice(mark);
+        expect(after.length).toBeGreaterThan(0);
+        const want = held[lift]! * arm.config.joints[lift]!.direction;
+        // every frame from here on converges on the hold and ends exactly on it
+        expect(Math.abs(after[after.length - 1]![0] - want)).toBeLessThan(1e-3);
+        expect(after.every(([p]) => Math.abs(p - want) <= Math.abs(after[0]![0] - want) + 1e-9)).toBe(true);
+        expect(arm.state).toBe(ArmState.ENABLED);
+      } finally {
+        await teardown(arm);
+      }
+    });
+  });
+
   describe("planning limits", () => {
     function setup() {
       const config = fk.defaultConfig();

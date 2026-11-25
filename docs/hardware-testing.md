@@ -33,8 +33,8 @@ From Chromium over WebUSB (Metal Arm; the adapter granted by policy, see below):
 
 One Metal arm (the left one), Node 24 unless marked, against metal-arm-sdk `36c0bb4`. The rows ran
 at `4e2844f`; the stop, kill, cycle, sine and ownership rows ran again at `46386e4` or `8fe84da`
-with the same results, and the stalled-thread row is from `8fe84da`. The other Metal arm has not
-run at these commits.
+with the same results, and the stalled-thread row is from `8fe84da`. The right Metal arm and
+everything with two arms were left out: objects lay in the right arm's lane that night.
 
 | Test | Result |
 |---|---|
@@ -55,6 +55,24 @@ run at these commits.
 | `examples/node/check-sine.ts` on Node 22, and with one Ctrl-C mid-sine | ran and released; the Ctrl-C stopped the motion, returned to rest and released |
 | The application's thread blocked for 60, 150, 300 and 450 ms while the arm held | still enabled, no fault, loop back at 100 Hz, no movement; then released at rest |
 
+One Maker arm (old motor firmware: no torque state, no watchdog), Node 24, against maker-arm-sdk
+`28621d6`; at `4e2844f` unless a row names `2d9b08f`:
+
+| Test | Result |
+|---|---|
+| Read-only scan, frames against Python | identical (14 frames), at both commits |
+| `stop()` after one interrupt at hover | returned to rest and released (0.5 deg from rest at `2d9b08f`) |
+| A second interrupt during the return | held 3 s within 0.66 deg (0.88 deg at `2d9b08f`), every frame at the profile's gains, loop 182 Hz; a later `stop()` released at rest |
+| Process killed at hover, `attach()` | joints hold; gravity ramps from zero on this firmware: elbow dip 3.2 deg for 0.47 s; rest within 0.1 deg |
+| 25 enable, hover, `stop()` cycles, each in its own process | every cycle released; resting shoulder_lift moved 0.11 deg, toward rest (rest window 12 deg) |
+| Sines, TypeScript against Python | equal or lower RMS error on every joint; longest TypeScript tick 31 ms at `2d9b08f` |
+| `moveEe`, eight legs | measured within 3.9 mm |
+| `moveEe` cancelled early, superseded, 1 ms planning timeout (`2d9b08f`) | as on the Metal arm |
+| Gripper open and close | 0.98 open, 0.03 closed |
+| The application's thread blocked for 60 to 450 ms while the arm held (`2d9b08f`) | no fault, no write timeout, moved 0.02 deg or less |
+| `enable()` on an arm another process holds at hover (`2d9b08f`) | refused with `HeldByAnotherProgram` in 41 ms (elbow reading 4.9 N·m); the arm moved 0.02 deg or less |
+| `setMotorId` 7 to 8, then back (`2d9b08f`) | changed; 8 to 7 refused without `replacing`, accepted with it |
+
 ## Limits corrected during the run
 
 Five runs were recorded as failures because the bench script's own limit was wrong, not the arm's
@@ -72,9 +90,10 @@ corrected criterion and passed; none is an open failure.
 ## Not tested
 
 - Any motion above hover height, and any contact with an object.
-- At these commits: the second Metal arm, two arms together, `setMotorId`, and an `enable()`
-  refused with `HeldByAnotherProgram`. The Maker arm's results at these commits are not in this
-  file yet.
+- At these commits: the right Metal arm and two arms together (objects in the right arm's lane).
+- Commits `46386e4` and `8fe84da` (the last changes to `stop()`'s release recheck, the frame guard
+  after a hold, `detach()` after a failed close, and the timeout handling) have had no independent
+  review; the earlier ones had three.
 - A policy-driven episode (the Dream client with these arms).
 - Two Maker arms; the SO-101; a Star leader; an SLCAN adapter.
 - Hand-guided teleoperation and float mode.
@@ -88,6 +107,14 @@ corrected criterion and passed; none is an open failure.
   zero and eases it in over 0.5 s, so a loaded joint dips for a moment at takeover (about 3.5 deg on
   the Metal elbow). The Python SDK does the same. With `"measured"` the dip was 0.6 deg in its one
   run; it needs every gravity-chain joint to report torque state, so old Maker firmware ramps.
+- A cancelled `moveEe` holds where the arm is, not where the last row put the command, so it can
+  settle a little ahead of or behind the last commanded point: 6 mm low on an upward leg on the
+  Metal arm (the standing error under gravity); 1.6 mm ahead on the Maker arm when cancelled late
+  with the loop running slow.
+- `connect()` parses the URDF and builds the chain on the calling thread: 64 to 81 ms on a small
+  ARM board, and `enable()` about 70 ms there. A write in flight is not affected, but another arm
+  already enabled in the same thread loses control ticks meanwhile: connect every arm before
+  enabling any.
 - A `moveEe` that keeps the tool's orientation moves the tool sideways by swinging shoulder_pan with
   wrist_yaw counter-rotating: about 24 deg of pan for 1 cm on the Metal arm. The tool point stays on
   the line; the elbow does not.
@@ -102,8 +129,8 @@ corrected criterion and passed; none is an open failure.
 - The Metal wrist_flex joint lags its command by about 175 ms; the other joints by 65 to 100 ms.
 - At `6142f53` the rest pose `stop()` returns to was the pose at `enable()`, and repeated
   enable/rest cycles crept: on the Maker arm the resting shoulder_lift moved from -4.5 to -14 deg in
-  about 15 cycles and the unpowered arm then tipped backwards. The rest window (`restWindow`, set
-  for the Maker arm) is meant to stop this; it has not run on the Maker arm yet.
+  about 15 cycles and the unpowered arm then tipped backwards. With the rest window (`restWindow`,
+  12 deg on the Maker arm) it moved 0.11 deg in 25 cycles.
 - Headless Chromium lists no USB devices. For unattended runs use headed Chromium (under `xvfb-run`)
   with the `WebUsbAllowDevicesForUrls` policy granting the adapter to the page's origin; the page
   then finds it with `grantedAdapters()` and no chooser is shown.
